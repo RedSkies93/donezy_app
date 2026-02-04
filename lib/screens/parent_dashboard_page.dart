@@ -186,7 +186,7 @@ _selectedChildId ??= selected.id;
                             'updatedAt': FieldValue.serverTimestamp(),
                           });
 
-                          if (!mounted) return;
+                          if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('Completed! +$pointsToAdd pts 🎉')),
                           );
@@ -291,7 +291,8 @@ _selectedChildId ??= selected.id;
 
     if (ok == true) {
       await FirebaseAuth.instance.signOut();
-      if (!mounted) return;
+      if (!context.mounted) return;
+      if (!context.mounted) return;
 
       Navigator.pushNamedAndRemoveUntil(
         context,
