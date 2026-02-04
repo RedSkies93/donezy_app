@@ -126,10 +126,22 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
 
                       _selectedChildId ??= children.first.id;
 
-                      final selected = children.firstWhere(
-                        (d) => d.id == _selectedChildId,
-                        orElse: () => children.first,
-                      );
+                      QueryDocumentSnapshot<Map<String, dynamic>> selected = children.first;
+
+// If we have a selectedChildId, try to find it safely (no firstWhere/orElse)
+final wantedId = _selectedChildId;
+if (wantedId != null) {
+  for (final d in children) {
+    if (d.id == wantedId) {
+      selected = d;
+      break;
+    }
+  }
+}
+
+// If selectedChildId is null, lock onto the first child
+_selectedChildId ??= selected.id;
+
 
                       final data = selected.data();
                       final childName = (data['name'] ?? 'Child').toString();
