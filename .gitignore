@@ -43,3 +43,12 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# ---- Secret protection (added) ----
+.env
+.env.*
+*.pem
+*.p12
+serviceAccount*.json
+*firebase-adminsdk*.json
+**/.runtimeconfig.json
