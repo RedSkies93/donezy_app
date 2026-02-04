@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class MessagePage extends StatefulWidget {
+  static const routeName = '/messages';
+
   final String parentUid;
   const MessagePage({super.key, required this.parentUid});
 
@@ -12,6 +14,7 @@ class MessagePage extends StatefulWidget {
 
 class _MessagePageState extends State<MessagePage> {
   final _ctrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
 
   Future<void> _send() async {
     final text = _ctrl.text.trim();
@@ -35,6 +38,7 @@ class _MessagePageState extends State<MessagePage> {
   @override
   void dispose() {
     _ctrl.dispose();
+    _scrollCtrl.dispose();
     super.dispose();
   }
 
@@ -61,10 +65,16 @@ class _MessagePageState extends State<MessagePage> {
               builder: (context, snap) {
                 final docs = snap.data?.docs ?? [];
                 if (docs.isEmpty) {
-                  return const Center(child: Text('No messages yet.\nSay hi 👋', textAlign: TextAlign.center));
+                  return const Center(
+                    child: Text(
+                      'No messages yet.\nSay hi 👋',
+                      textAlign: TextAlign.center,
+                    ),
+                  );
                 }
 
                 return ListView.builder(
+                  controller: _scrollCtrl,
                   reverse: true,
                   padding: const EdgeInsets.all(16),
                   itemCount: docs.length,
@@ -75,14 +85,26 @@ class _MessagePageState extends State<MessagePage> {
                     final mine = sender == FirebaseAuth.instance.currentUser?.uid;
 
                     return Align(
-                      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                      alignment:
+                          mine ? Alignment.centerRight : Alignment.centerLeft,
                       child: Container(
+                        constraints: const BoxConstraints(maxWidth: 340),
                         margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
-                          color: mine ? const Color(0xFFDEE7FF) : Colors.white,
+                          color:
+                              mine ? const Color(0xFFDEE7FF) : Colors.white,
                           borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: const Color(0xFFE6E8FF)),
+                          border:
+                              Border.all(color: const Color(0xFFE6E8FF)),
+                          boxShadow: const [
+                            BoxShadow(
+                              blurRadius: 10,
+                              color: Color(0x12000000),
+                              offset: Offset(0, 6),
+                            ),
+                          ],
                         ),
                         child: Text(text),
                       ),
@@ -92,7 +114,6 @@ class _MessagePageState extends State<MessagePage> {
               },
             ),
           ),
-
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
@@ -101,18 +122,34 @@ class _MessagePageState extends State<MessagePage> {
                   Expanded(
                     child: TextField(
                       controller: _ctrl,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
                       decoration: InputDecoration(
                         hintText: 'Type a message…',
                         filled: true,
                         fillColor: Colors.white,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(18)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide:
+                              const BorderSide(color: Color(0xFFE6E8FF)),
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  IconButton(
-                    onPressed: _send,
-                    icon: const Icon(Icons.send_rounded),
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFBFD0FF),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: IconButton(
+                      onPressed: _send,
+                      icon: const Icon(Icons.send_rounded),
+                    ),
                   ),
                 ],
               ),

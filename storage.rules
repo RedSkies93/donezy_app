@@ -1,4 +1,5 @@
 rules_version = '2';
+
 service firebase.storage {
   match /b/{bucket}/o {
 
@@ -22,6 +23,11 @@ service firebase.storage {
         );
 
       allow write: if signedIn() && request.auth.uid == parentUid;
+    }
+
+    // Default deny for anything not matched above
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }
