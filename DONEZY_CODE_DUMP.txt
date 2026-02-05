@@ -1,0 +1,4698 @@
+===============================
+FILE: lib/main.dart
+===============================
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+
+import 'firebase_options.dart';
+
+import 'screens/app_bootstrap.dart';
+import 'screens/login_page.dart';
+import 'screens/settings_page.dart';
+import 'screens/parent_dashboard_page.dart';
+import 'screens/message_page.dart';
+import 'screens/awards_page.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(const DonezyApp());
+}
+
+class DonezyApp extends StatelessWidget {
+  const DonezyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Donezy',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(useMaterial3: false),
+      home: const AppBootstrap(),
+
+      // Simple named routes (no args)
+      routes: {
+        LoginPage.routeName: (_) => const LoginPage(),
+        SettingsPage.routeName: (_) => const SettingsPage(),
+        ParentDashboardPage.routeName: (_) => const ParentDashboardPage(),
+      },
+
+      // Routes that require arguments
+      onGenerateRoute: (settings) {
+        if (settings.name == MessagePage.routeName) {
+          final args =
+              (settings.arguments as Map?)?.cast<String, dynamic>() ?? {};
+          final parentUid = (args['parentUid'] ?? '').toString();
+          return MaterialPageRoute(
+            builder: (_) => MessagePage(parentUid: parentUid),
+            settings: settings,
+          );
+        }
+
+        if (settings.name == AwardsPage.routeName) {
+          final args =
+              (settings.arguments as Map?)?.cast<String, dynamic>() ?? {};
+          final parentUid = (args['parentUid'] ?? '').toString();
+          final childId = (args['childId'] ?? '').toString();
+          final modeStr = (args['mode'] ?? 'parent').toString();
+          final mode = modeStr == 'child' ? AwardsMode.child : AwardsMode.parent;
+
+          return MaterialPageRoute(
+            builder: (_) => AwardsPage(
+              parentUid: parentUid,
+              childId: childId,
+              mode: mode,
+            ),
+            settings: settings,
+          );
+        }
+
+        return null;
+      },
+    );
+  }
+}
+
+
+
+
+===============================
+FILE: lib/screens/app_bootstrap.dart
+===============================
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../services/session_store.dart';
+import 'login_page.dart';
+import 'role_select_page.dart';
+import 'parent_dashboard_page.dart';
+import 'child_dashboard_page.dart';
+
+class AppBootstrap extends StatelessWidget {
+  const AppBootstrap({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const _Splash();
+        }
+
+        final user = snap.data;
+        if (user == null) {
+          return const LoginPage();
+        }
+
+        return FutureBuilder<SessionData>(
+          future: SessionStore.load(),
+          builder: (context, s) {
+            if (s.connectionState == ConnectionState.waiting) {
+              return const _Splash();
+            }
+            final session = s.data ?? const SessionData();
+
+            // If no role chosen yet, go choose role
+            if (session.role == null) {
+              return const RoleSelectPage();
+            }
+
+            // Parent route
+            if (session.role == SessionRole.parent) {
+              return const ParentDashboardPage();
+            }
+
+            // Child route (needs parentUid + childId)
+            if (session.role == SessionRole.child &&
+                session.parentUid != null &&
+                session.childId != null) {
+              return ChildDashboardPage(
+                parentUid: session.parentUid!,
+                childId: session.childId!,
+              );
+            }
+
+            // Child role but not joined yet -> back to role select (or join flow)
+            return const RoleSelectPage();
+          },
+        );
+      },
+    );
+  }
+}
+
+class _Splash extends StatelessWidget {
+  const _Splash();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFFF8F9FF),
+      body: Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(strokeWidth: 3),
+        ),
+      ),
+    );
+  }
+}
+
+
+
+
+===============================
+FILE: lib/screens/login_page.dart
+===============================
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../services/session_store.dart';
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+  static const routeName = '/login';
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+
+  bool _loading = false;
+  String? _error;
+
+  Future<void> _signInOrCreateEmail() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final email = _emailCtrl.text.trim();
+      final pass = _passCtrl.text.trim();
+
+      if (email.isEmpty) throw Exception('Enter an email.');
+      if (pass.length < 6) {
+        throw Exception('Password must be at least 6 characters.');
+      }
+
+      try {
+        await FirebaseAuth.instance
+            .signInWithEmailAndPassword(email: email, password: pass);
+      } catch (_) {
+        await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(email: email, password: pass);
+      }
+
+      await SessionStore.clearAll();
+      // No navigation: AppBootstrap routes based on auth + session.
+    } on FirebaseAuthException catch (e) {
+      setState(() => _error = e.message ?? e.code);
+    } catch (e) {
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _signInAnonymous() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      await FirebaseAuth.instance.signInAnonymously();
+      await SessionStore.clearAll();
+    } on FirebaseAuthException catch (e) {
+      setState(() => _error = e.message ?? e.code);
+    } catch (e) {
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FF),
+      body: Stack(
+        children: [
+          const _CuteBackdrop(),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+              child: Column(
+                children: [
+                  const SizedBox(height: 6),
+                  const _LogoHeader(),
+                  const SizedBox(height: 14),
+                  const _ValueProps(),
+                  const SizedBox(height: 14),
+                  _CuteCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Parent login',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _emailCtrl,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: _input('Email'),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _passCtrl,
+                          obscureText: true,
+                          decoration: _input('Password'),
+                        ),
+                        const SizedBox(height: 12),
+                        if (_error != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(color: Colors.red),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 54,
+                          child: ElevatedButton(
+                            onPressed: _loading ? null : _signInOrCreateEmail,
+                            style: ElevatedButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: _loading
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  )
+                                : const Text('Continue'),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: const [
+                            Expanded(child: Divider()),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 10),
+                              child: Text('or'),
+                            ),
+                            Expanded(child: Divider()),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 54,
+                          child: OutlinedButton(
+                            onPressed: _loading ? null : _signInAnonymous,
+                            style: OutlinedButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                            child: const Text('Continue as Admin (Anonymous)'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Kids join with a code after role selection.',
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _input(String label) => InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: Color(0xFFE6E8FF)),
+        ),
+      );
+}
+
+class _LogoHeader extends StatelessWidget {
+  const _LogoHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 74,
+          height: 74,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: const Color(0xFFE6E8FF)),
+            boxShadow: const [
+              BoxShadow(
+                blurRadius: 18,
+                color: Color(0x14000000),
+                offset: Offset(0, 12),
+              )
+            ],
+          ),
+          child: const Icon(Icons.checklist_rounded, size: 40),
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          'Donezy',
+          style: TextStyle(fontSize: 38, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Cute tasks • happy kids • calm parents',
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
+class _ValueProps extends StatelessWidget {
+  const _ValueProps();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: const [
+        Expanded(
+          child: _Prop(
+            icon: Icons.auto_awesome_rounded,
+            title: 'Fun',
+            subtitle: 'Kids actually care',
+          ),
+        ),
+        SizedBox(width: 10),
+        Expanded(
+          child: _Prop(
+            icon: Icons.timelapse_rounded,
+            title: 'Simple',
+            subtitle: 'Fast to manage',
+          ),
+        ),
+        SizedBox(width: 10),
+        Expanded(
+          child: _Prop(
+            icon: Icons.emoji_events_rounded,
+            title: 'Rewards',
+            subtitle: 'Points → prizes',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Prop extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  const _Prop({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE6E8FF)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF2FF),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(icon),
+          ),
+          const SizedBox(height: 8),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CuteCard extends StatelessWidget {
+  final Widget child;
+  const _CuteCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 18,
+            color: Color(0x14000000),
+            offset: Offset(0, 10),
+          )
+        ],
+        border: Border.all(color: const Color(0xFFE6E8FF)),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _CuteBackdrop extends StatelessWidget {
+  const _CuteBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: CustomPaint(
+        painter: _BokehPainter(),
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFFFFFBFF),
+                Color(0xFFF2F5FF),
+                Color(0xFFFFF1F3),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BokehPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..style = PaintingStyle.fill;
+
+    void circle(double x, double y, double r, Color c) {
+      paint.color = c;
+      canvas.drawCircle(Offset(x * size.width, y * size.height), r, paint);
+    }
+
+    circle(0.15, 0.20, 60, const Color(0x22BFD0FF));
+    circle(0.85, 0.18, 70, const Color(0x22FFC6D0));
+    circle(0.80, 0.55, 85, const Color(0x18B8F7D4));
+    circle(0.22, 0.72, 95, const Color(0x18FFD36A));
+    circle(0.55, 0.85, 80, const Color(0x14C1B6FF));
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+
+
+
+===============================
+FILE: lib/screens/role_select_page.dart
+===============================
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../services/session_store.dart';
+import '../services/code_generator.dart';
+import 'child_join_page.dart';
+import 'parent_dashboard_page.dart';
+
+class RoleSelectPage extends StatefulWidget {
+  const RoleSelectPage({super.key});
+  static const routeName = '/role';
+
+  @override
+  State<RoleSelectPage> createState() => _RoleSelectPageState();
+}
+
+class _RoleSelectPageState extends State<RoleSelectPage> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _chooseParent() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Not signed in.');
+
+      // Make sure parent doc exists (create shared code if missing)
+      final parents = FirebaseFirestore.instance.collection('parents');
+      final ref = parents.doc(user.uid);
+      final snap = await ref.get();
+
+      if (!snap.exists) {
+        final sharedCode = await CodeGenerator.generateUniqueHouseholdCode(parentUid: user.uid);
+        await ref.set({
+          'displayName': user.email ?? 'Parent',
+          'photoUrl': null,
+          'sharedCode': sharedCode,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // mark member role
+      await ref.collection('members').doc(user.uid).set({
+        'role': 'parent',
+        'childId': null,
+        'joinedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      await SessionStore.setRole(SessionRole.parent);
+
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ParentDashboardPage()),
+      );
+    } catch (e) {
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _chooseChild() async {
+    setState(() => _error = null);
+    await SessionStore.setRole(SessionRole.child);
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const ChildJoinPage()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FF),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            children: [
+              const SizedBox(height: 16),
+              const Text(
+                'Who are you?',
+                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 6),
+              const Text('Pick one — you can change later in Settings.'),
+              const SizedBox(height: 18),
+
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                ),
+
+              _RoleButton(
+                title: 'I am a Parent',
+                subtitle: 'Create kids • Make tasks • Track progress',
+                icon: Icons.shield_moon_rounded,
+                onTap: _busy ? null : _chooseParent,
+              ),
+              const SizedBox(height: 12),
+              _RoleButton(
+                title: 'I am a Child',
+                subtitle: 'Join with a code • Do tasks • Earn points',
+                icon: Icons.emoji_events_rounded,
+                onTap: _busy ? null : _chooseChild,
+              ),
+
+              const Spacer(),
+              if (_busy) const CircularProgressIndicator(),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoleButton extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _RoleButton({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(22),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: const Color(0xFFE6E8FF)),
+          boxShadow: const [
+            BoxShadow(blurRadius: 16, color: Color(0x14000000), offset: Offset(0, 10))
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF2FF),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Icon(icon, size: 28),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 4),
+                  Text(subtitle),
+                ],
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+
+
+
+===============================
+FILE: lib/screens/parent_dashboard_page.dart
+===============================
+import 'dart:io';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import 'login_page.dart';
+import 'settings_page.dart';
+import 'message_page.dart';
+import 'awards_page.dart';
+
+class ParentDashboardPage extends StatefulWidget {
+  const ParentDashboardPage({super.key});
+  static const routeName = '/parent';
+
+  @override
+  State<ParentDashboardPage> createState() => _ParentDashboardPageState();
+}
+
+class _ParentDashboardPageState extends State<ParentDashboardPage> {
+  String? _selectedChildId;
+
+  User get _user => FirebaseAuth.instance.currentUser!;
+  String get _parentUid => _user.uid;
+
+  DocumentReference<Map<String, dynamic>> get _parentDoc =>
+      FirebaseFirestore.instance.collection('parents').doc(_parentUid);
+
+  CollectionReference<Map<String, dynamic>> get _childrenCol =>
+      _parentDoc.collection('children');
+
+  CollectionReference<Map<String, dynamic>> _privateTasksCol(String childId) =>
+      _childrenCol.doc(childId).collection('tasksPrivate');
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FF),
+
+      bottomNavigationBar: _ParentBottomNav(
+        onTasks: () {},
+        onStore: () {
+          if (_selectedChildId == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Pick a child first 👶🏽')),
+            );
+            return;
+          }
+          Navigator.pushNamed(
+            context,
+            AwardsPage.routeName,
+            arguments: {
+              'parentUid': _parentUid,
+              'childId': _selectedChildId!,
+              'mode': 'parent',
+            },
+          );
+        },
+        onMessages: () {
+          Navigator.pushNamed(
+            context,
+            MessagePage.routeName,
+            arguments: {'parentUid': _parentUid},
+          );
+        },
+        onSettings: () => Navigator.pushNamed(context, SettingsPage.routeName),
+      ),
+
+      body: SafeArea(
+        child: Stack(
+          children: [
+            const _CuteBokehBackground(),
+            Column(
+              children: [
+                _TopHeader(
+                  title: 'Donezy',
+                  onLogout: _confirmLogout,
+                  onSettings: () =>
+                      Navigator.pushNamed(context, SettingsPage.routeName),
+                  onPhotoTap: _pickAndUploadParentPhoto,
+                ),
+
+                // Children strip
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                  child: _ChildrenStrip(
+                    childrenStream: _childrenCol
+                        .orderBy('createdAt', descending: false)
+                        .snapshots(),
+                    selectedChildId: _selectedChildId,
+                    onSelect: (id) => setState(() => _selectedChildId = id),
+                    onEditChildren: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Child manager coming next ✨'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                // Main content
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: _childrenCol
+                        .orderBy('createdAt', descending: false)
+                        .snapshots(),
+                    builder: (context, snap) {
+                      if (!snap.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final children = snap.data!.docs;
+
+                      if (children.isEmpty) {
+                        return _EmptyState(
+                          title: 'Add your first child',
+                          subtitle:
+                              'Create a child profile so you can start making cute tasks.',
+                          buttonText: 'Create Child',
+                          onPressed: _createChildQuick,
+                        );
+                      }
+
+                      _selectedChildId ??= children.first.id;
+
+                      QueryDocumentSnapshot<Map<String, dynamic>> selected = children.first;
+
+// If we have a selectedChildId, try to find it safely (no firstWhere/orElse)
+final wantedId = _selectedChildId;
+if (wantedId != null) {
+  for (final d in children) {
+    if (d.id == wantedId) {
+      selected = d;
+      break;
+    }
+  }
+}
+
+// If selectedChildId is null, lock onto the first child
+_selectedChildId ??= selected.id;
+
+
+                      final data = selected.data();
+                      final childName = (data['name'] ?? 'Child').toString();
+                      final points = (data['points'] ?? 0) is int
+                          ? (data['points'] ?? 0) as int
+                          : int.tryParse('${data['points']}') ?? 0;
+
+                      return _DashboardBody(
+                        childId: selected.id,
+                        childName: childName,
+                        childPoints: points,
+                        tasksStream: _privateTasksCol(selected.id)
+                            .orderBy('createdAt', descending: false)
+                            .snapshots(),
+                        onAddTask: () => _openCreateTaskSheet(
+                          childId: selected.id,
+                          childName: childName,
+                        ),
+                        onDeleteTask: (taskId) => _confirmDeleteTask(
+                          childId: selected.id,
+                          taskId: taskId,
+                        ),
+                        onToggleActive: (taskId, isActive) =>
+                            _privateTasksCol(selected.id).doc(taskId).update({
+                          'isActive': isActive,
+                          'updatedAt': FieldValue.serverTimestamp(),
+                        }),
+                        onToggleImportant: (taskId, isImportant) =>
+                            _privateTasksCol(selected.id).doc(taskId).update({
+                          'isImportant': isImportant,
+                          'updatedAt': FieldValue.serverTimestamp(),
+                        }),
+                        onMarkComplete: (taskId, pointsToAdd) async {
+                          await _privateTasksCol(selected.id).doc(taskId).update({
+                            'status': 'completed',
+                            'updatedAt': FieldValue.serverTimestamp(),
+                          });
+
+                          // add points to child
+                          await _childrenCol.doc(selected.id).update({
+                            'points': FieldValue.increment(pointsToAdd),
+                            'updatedAt': FieldValue.serverTimestamp(),
+                          });
+
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Completed! +$pointsToAdd pts 🎉')),
+                          );
+                        },
+                        onPickDueDate: (taskId, current) async {
+                          final picked = await _pickCuteDate(context, current);
+                          if (picked == null) return;
+                          await _privateTasksCol(selected.id).doc(taskId).update({
+                            'dueDate': Timestamp.fromDate(picked),
+                            'updatedAt': FieldValue.serverTimestamp(),
+                          });
+                        },
+                        onPickIcon: (taskId, iconKey) async {
+                          await _privateTasksCol(selected.id).doc(taskId).update({
+                            'iconKey': iconKey,
+                            'imageUrl': null, // icon replaces image
+                            'updatedAt': FieldValue.serverTimestamp(),
+                          });
+                        },
+                        onPickTaskImage: (taskId) async {
+                          final url = await _pickAndUploadTaskImage(
+                            parentUid: _parentUid,
+                            childId: selected.id,
+                            taskId: taskId,
+                          );
+                          if (url == null) return;
+
+                          await _privateTasksCol(selected.id).doc(taskId).update({
+                            'imageUrl': url,
+                            'iconKey': null, // image replaces icon
+                            'updatedAt': FieldValue.serverTimestamp(),
+                          });
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ----------------------------
+  // Quick child create (simple)
+  // ----------------------------
+  Future<void> _createChildQuick() async {
+    final nameCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: const Text('Create child',
+            style: TextStyle(fontWeight: FontWeight.w900)),
+        content: TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(labelText: 'Name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+    final name = nameCtrl.text.trim();
+    if (name.isEmpty) return;
+
+    final doc = _childrenCol.doc();
+    await doc.set({
+      'name': name,
+      'points': 0,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    setState(() => _selectedChildId = doc.id);
+  }
+
+  // ----------------------------
+  // Logout
+  // ----------------------------
+  Future<void> _confirmLogout() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _CuteConfirmDialog(
+        title: 'Logout?',
+        message: 'Are you sure you want to log out?',
+        confirmText: 'Logout',
+        cancelText: 'Cancel',
+      ),
+    );
+
+    if (ok == true) {
+      await FirebaseAuth.instance.signOut();
+      if (!mounted) return;
+
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        LoginPage.routeName,
+        (r) => false,
+      );
+    }
+  }
+
+  // ----------------------------
+  // Parent photo (optional)
+  // ----------------------------
+  Future<void> _pickAndUploadParentPhoto() async {
+    final picker = ImagePicker();
+    final x = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (x == null) return;
+
+    final file = File(x.path);
+    final ref = FirebaseStorage.instance
+        .ref()
+        .child('parents')
+        .child(_parentUid)
+        .child('avatar.jpg');
+
+    await ref.putFile(file);
+    final url = await ref.getDownloadURL();
+
+    await _parentDoc.set({
+      'photoUrl': url,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  // ----------------------------
+  // Create task sheet
+  // ----------------------------
+  Future<void> _openCreateTaskSheet({
+    required String childId,
+    required String childName,
+  }) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CreateTaskSheet(
+        childName: childName,
+        onCreate: (payload) async {
+          final doc = _privateTasksCol(childId).doc();
+          await doc.set({
+            'title': payload.title,
+            'points': payload.points,
+            'status': 'open',
+            'isActive': payload.isActive,
+            'isImportant': payload.isImportant,
+            'dueDate': payload.dueDate == null
+                ? null
+                : Timestamp.fromDate(payload.dueDate!),
+            'iconKey': payload.iconKey,
+            'imageUrl': payload.imageUrl,
+            'note': payload.note,
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        },
+        uploadImage: () async {
+          // Temporary upload to a "draft" path for create flow
+          final picker = ImagePicker();
+          final x = await picker.pickImage(
+            source: ImageSource.gallery,
+            imageQuality: 85,
+          );
+          if (x == null) return null;
+
+          final file = File(x.path);
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child('parents')
+              .child(_parentUid)
+              .child('children')
+              .child(childId)
+              .child('taskDrafts')
+              .child('draft_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+          await ref.putFile(file);
+          return ref.getDownloadURL();
+        },
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteTask({
+    required String childId,
+    required String taskId,
+  }) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _CuteConfirmDialog(
+        title: 'Delete task?',
+        message: 'This will remove the task from the list.',
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+      ),
+    );
+
+    if (ok == true) {
+      await _privateTasksCol(childId).doc(taskId).delete();
+    }
+  }
+
+  // ----------------------------
+  // Due date picker
+  // ----------------------------
+  Future<DateTime?> _pickCuteDate(BuildContext context, DateTime? current) async {
+    final now = DateTime.now();
+    return showDatePicker(
+      context: context,
+      initialDate: current ?? now,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 3),
+    );
+  }
+
+  // ----------------------------
+  // Task image upload
+  // ----------------------------
+  Future<String?> _pickAndUploadTaskImage({
+    required String parentUid,
+    required String childId,
+    required String taskId,
+  }) async {
+    final picker = ImagePicker();
+    final x = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (x == null) return null;
+
+    final file = File(x.path);
+    final ref = FirebaseStorage.instance
+        .ref()
+        .child('parents')
+        .child(parentUid)
+        .child('children')
+        .child(childId)
+        .child('tasks')
+        .child(taskId)
+        .child('photo.jpg');
+
+    await ref.putFile(file);
+    return ref.getDownloadURL();
+  }
+}
+
+// ============================================================================
+// Dashboard body (tasks list + stats)
+// ============================================================================
+class _DashboardBody extends StatelessWidget {
+  final String childId;
+  final String childName;
+  final int childPoints;
+
+  final Stream<QuerySnapshot<Map<String, dynamic>>> tasksStream;
+
+  final VoidCallback onAddTask;
+  final Future<void> Function(String taskId) onDeleteTask;
+
+  final Future<void> Function(String taskId, bool isActive) onToggleActive;
+  final Future<void> Function(String taskId, bool isImportant) onToggleImportant;
+  final Future<void> Function(String taskId, int pointsToAdd) onMarkComplete;
+
+  final Future<void> Function(String taskId, DateTime? current) onPickDueDate;
+  final Future<void> Function(String taskId, String iconKey) onPickIcon;
+  final Future<void> Function(String taskId) onPickTaskImage;
+
+  const _DashboardBody({
+    required this.childId,
+    required this.childName,
+    required this.childPoints,
+    required this.tasksStream,
+    required this.onAddTask,
+    required this.onDeleteTask,
+    required this.onToggleActive,
+    required this.onToggleImportant,
+    required this.onMarkComplete,
+    required this.onPickDueDate,
+    required this.onPickIcon,
+    required this.onPickTaskImage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+      child: Column(
+        children: [
+          _KidSummaryCard(name: childName, points: childPoints),
+          const SizedBox(height: 10),
+
+          Expanded(
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: tasksStream,
+              builder: (context, snap) {
+                final docs = snap.data?.docs ?? [];
+
+                if (!snap.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (docs.isEmpty) {
+                  return _EmptyState(
+                    title: 'No tasks yet ✨',
+                    subtitle: 'Tap the button below to add a cute task.',
+                    buttonText: 'Add Task',
+                    onPressed: onAddTask,
+                  );
+                }
+
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: const Color(0xFFE6E8FF)),
+                    boxShadow: const [
+                      BoxShadow(
+                        blurRadius: 14,
+                        color: Color(0x12000000),
+                        offset: Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+                        child: Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Tasks',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            _SoftButton(
+                              icon: Icons.add_rounded,
+                              label: 'Add',
+                              onTap: onAddTask,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1),
+
+                      Expanded(
+                        child: ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                          itemCount: docs.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (context, i) {
+                            final d = docs[i];
+                            final data = d.data();
+
+                            final title = (data['title'] ?? 'Task').toString();
+                            final note = (data['note'] ?? '').toString();
+                            final points = (data['points'] ?? 0) is int
+                                ? (data['points'] ?? 0) as int
+                                : int.tryParse('${data['points']}') ?? 0;
+
+                            final status = (data['status'] ?? 'open').toString();
+                            final isActive = (data['isActive'] ?? true) as bool;
+                            final isImportant = (data['isImportant'] ?? false) as bool;
+
+                            final dueTs = data['dueDate'];
+                            final dueDate = dueTs is Timestamp ? dueTs.toDate() : null;
+
+                            final iconKey = (data['iconKey'] ?? '').toString();
+                            final imageUrl = (data['imageUrl'] ?? '').toString();
+
+                            return _TaskCard(
+                              title: title,
+                              note: note,
+                              points: points,
+                              status: status,
+                              isActive: isActive,
+                              isImportant: isImportant,
+                              dueDate: dueDate,
+                              iconKey: iconKey,
+                              imageUrl: imageUrl.isEmpty ? null : imageUrl,
+                              onDelete: () => onDeleteTask(d.id),
+                              onToggleActive: (v) => onToggleActive(d.id, v),
+                              onToggleImportant: (v) => onToggleImportant(d.id, v),
+                              onComplete: status == 'completed'
+                                  ? null
+                                  : () => onMarkComplete(d.id, points),
+                              onPickDue: () => onPickDueDate(d.id, dueDate),
+                              onPickIcon: () => _IconPickerSheet.open(
+                                context,
+                                onPick: (key) => onPickIcon(d.id, key),
+                              ),
+                              onPickImage: () => onPickTaskImage(d.id),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Top header (logo + parent photo + logout/settings)
+// ============================================================================
+class _TopHeader extends StatelessWidget {
+  final String title;
+  final VoidCallback onLogout;
+  final VoidCallback onSettings;
+  final VoidCallback onPhotoTap;
+
+  const _TopHeader({
+    required this.title,
+    required this.onLogout,
+    required this.onSettings,
+    required this.onPhotoTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      child: Row(
+        children: [
+          _CircleIconButton(
+            icon: Icons.logout_rounded,
+            onTap: onLogout,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Center(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          _CircleIconButton(
+            icon: Icons.settings_rounded,
+            onTap: onSettings,
+          ),
+          const SizedBox(width: 10),
+          InkWell(
+            onTap: onPhotoTap,
+            borderRadius: BorderRadius.circular(999),
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: const Color(0xFFE6E8FF)),
+                boxShadow: const [
+                  BoxShadow(
+                    blurRadius: 10,
+                    color: Color(0x12000000),
+                    offset: Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.person_rounded),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CircleIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _CircleIconButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: const Color(0xFFE6E8FF)),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 10,
+              color: Color(0x12000000),
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Icon(icon),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Children strip
+// ============================================================================
+class _ChildrenStrip extends StatelessWidget {
+  final Stream<QuerySnapshot<Map<String, dynamic>>> childrenStream;
+  final String? selectedChildId;
+  final ValueChanged<String> onSelect;
+  final VoidCallback onEditChildren;
+
+  const _ChildrenStrip({
+    required this.childrenStream,
+    required this.selectedChildId,
+    required this.onSelect,
+    required this.onEditChildren,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: childrenStream,
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? [];
+        if (!snap.hasData) {
+          return const SizedBox(height: 74);
+        }
+
+        return Row(
+          children: [
+            _SoftButton(
+              icon: Icons.edit_rounded,
+              label: 'Edit',
+              onTap: onEditChildren,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: SizedBox(
+                height: 62,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: docs.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, i) {
+                    final d = docs[i];
+                    final name = (d.data()['name'] ?? 'Kid').toString();
+                    final selected = d.id == selectedChildId;
+
+                    return InkWell(
+                      onTap: () => onSelect(d.id),
+                      borderRadius: BorderRadius.circular(18),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 160),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? const Color(0xFFDEE7FF)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: const Color(0xFFE6E8FF)),
+                          boxShadow: const [
+                            BoxShadow(
+                              blurRadius: 10,
+                              color: Color(0x12000000),
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          name,
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SoftButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _SoftButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEFF2FF),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE6E8FF)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 18),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Kid summary card
+// ============================================================================
+class _KidSummaryCard extends StatelessWidget {
+  final String name;
+  final int points;
+
+  const _KidSummaryCard({required this.name, required this.points});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE6E8FF)),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 14,
+            color: Color(0x12000000),
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF1F3),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Icon(Icons.child_care_rounded),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                const Text('Ready for some cute tasks? ✨'),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF2FF),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Column(
+              children: [
+                const Text('Points',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(
+                  '$points',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Task card
+// ============================================================================
+class _TaskCard extends StatelessWidget {
+  final String title;
+  final String note;
+  final int points;
+  final String status;
+  final bool isActive;
+  final bool isImportant;
+  final DateTime? dueDate;
+
+  final String iconKey;
+  final String? imageUrl;
+
+  final VoidCallback onDelete;
+  final ValueChanged<bool> onToggleActive;
+  final ValueChanged<bool> onToggleImportant;
+  final VoidCallback? onComplete;
+  final VoidCallback onPickDue;
+  final VoidCallback onPickIcon;
+  final VoidCallback onPickImage;
+
+  const _TaskCard({
+    required this.title,
+    required this.note,
+    required this.points,
+    required this.status,
+    required this.isActive,
+    required this.isImportant,
+    required this.dueDate,
+    required this.iconKey,
+    required this.imageUrl,
+    required this.onDelete,
+    required this.onToggleActive,
+    required this.onToggleImportant,
+    required this.onComplete,
+    required this.onPickDue,
+    required this.onPickIcon,
+    required this.onPickImage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final completed = status == 'completed';
+    final pillText = completed
+        ? 'Completed'
+        : !isActive
+            ? 'Inactive'
+            : 'Open';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: completed ? const Color(0xFFF1FFF6) : Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE6E8FF)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _TaskVisual(iconKey: iconKey, imageUrl: imageUrl),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        _Pill(text: '$points pts', subtle: true),
+                        const SizedBox(width: 8),
+                        _Pill(
+                          text: pillText,
+                          subtle: !completed,
+                        ),
+                        const SizedBox(width: 8),
+                        if (isImportant)
+                          const _Pill(
+                            text: 'Important',
+                            subtle: false,
+                          ),
+                      ],
+                    ),
+                    if (dueDate != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Due: ${_fmtDate(dueDate!)}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
+            ],
+          ),
+
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(note),
+            ),
+          ],
+
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onPickDue,
+                  icon: const Icon(Icons.calendar_month_rounded),
+                  label: const Text('Due'),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onPickIcon,
+                  icon: const Icon(Icons.emoji_emotions_rounded),
+                  label: const Text('Icon'),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onPickImage,
+                  icon: const Icon(Icons.image_rounded),
+                  label: const Text('Photo'),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: SwitchListTile(
+                  value: isActive,
+                  onChanged: completed ? null : onToggleActive,
+                  title: const Text('Active'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              Expanded(
+                child: SwitchListTile(
+                  value: isImportant,
+                  onChanged: completed ? null : onToggleImportant,
+                  title: const Text('Important'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
+
+          if (!completed)
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: onComplete,
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+                child: const Text('Mark Completed 🎉'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static String _fmtDate(DateTime d) {
+    final mm = d.month.toString().padLeft(2, '0');
+    final dd = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$mm-$dd';
+  }
+}
+
+class _TaskVisual extends StatelessWidget {
+  final String iconKey;
+  final String? imageUrl;
+
+  const _TaskVisual({required this.iconKey, required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF2FF),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: hasImage
+          ? Image.network(imageUrl!, fit: BoxFit.cover)
+          : Center(
+              child: Text(
+                _iconToEmoji(iconKey),
+                style: const TextStyle(fontSize: 24),
+              ),
+            ),
+    );
+  }
+
+  String _iconToEmoji(String key) {
+    switch (key) {
+      case 'bed':
+        return '🛏️';
+      case 'brush':
+        return '🪥';
+      case 'clean':
+        return '🧹';
+      case 'homework':
+        return '📚';
+      case 'trash':
+        return '🗑️';
+      case 'pet':
+        return '🐶';
+      case 'laundry':
+        return '🧺';
+      case 'star':
+        return '⭐';
+      default:
+        return '✨';
+    }
+  }
+}
+
+class _Pill extends StatelessWidget {
+  final String text;
+  final bool subtle;
+
+  const _Pill({required this.text, this.subtle = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: subtle ? const Color(0xFFEFF2FF) : const Color(0xFFDEE7FF),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(text, style: const TextStyle(fontWeight: FontWeight.w800)),
+    );
+  }
+}
+
+// ============================================================================
+// Create Task Sheet
+// ============================================================================
+class _CreateTaskPayload {
+  final String title;
+  final int points;
+  final bool isActive;
+  final bool isImportant;
+  final DateTime? dueDate;
+  final String? iconKey;
+  final String? imageUrl;
+  final String note;
+
+  _CreateTaskPayload({
+    required this.title,
+    required this.points,
+    required this.isActive,
+    required this.isImportant,
+    required this.dueDate,
+    required this.iconKey,
+    required this.imageUrl,
+    required this.note,
+  });
+}
+
+class _CreateTaskSheet extends StatefulWidget {
+  final String childName;
+  final Future<void> Function(_CreateTaskPayload payload) onCreate;
+  final Future<String?> Function() uploadImage;
+
+  const _CreateTaskSheet({
+    required this.childName,
+    required this.onCreate,
+    required this.uploadImage,
+  });
+
+  @override
+  State<_CreateTaskSheet> createState() => _CreateTaskSheetState();
+}
+
+class _CreateTaskSheetState extends State<_CreateTaskSheet> {
+  final _titleCtrl = TextEditingController();
+  final _noteCtrl = TextEditingController();
+  final _pointsCtrl = TextEditingController(text: '10');
+
+  bool _active = true;
+  bool _important = false;
+  DateTime? _dueDate;
+  String? _iconKey = 'star';
+  String? _imageUrl;
+
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _noteCtrl.dispose();
+    _pointsCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final title = _titleCtrl.text.trim();
+    if (title.isEmpty) return;
+
+    final points = int.tryParse(_pointsCtrl.text.trim()) ?? 0;
+
+    setState(() => _saving = true);
+    try {
+      await widget.onCreate(
+        _CreateTaskPayload(
+          title: title,
+          points: points < 0 ? 0 : points,
+          isActive: _active,
+          isImportant: _important,
+          dueDate: _dueDate,
+          iconKey: _imageUrl == null ? _iconKey : null,
+          imageUrl: _imageUrl,
+          note: _noteCtrl.text.trim(),
+        ),
+      );
+      if (mounted) Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: Container(
+        margin: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: const Color(0xFFE6E8FF)),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 18,
+              color: Color(0x14000000),
+              offset: Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 46,
+              height: 5,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE6E8FF),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'New task for ${widget.childName}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _titleCtrl,
+              decoration: const InputDecoration(labelText: 'Task title'),
+            ),
+            TextField(
+              controller: _noteCtrl,
+              decoration: const InputDecoration(labelText: 'Note (optional)'),
+            ),
+            TextField(
+              controller: _pointsCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Points'),
+            ),
+            const SizedBox(height: 10),
+
+            Row(
+              children: [
+                Expanded(
+                  child: SwitchListTile(
+                    value: _active,
+                    onChanged: (v) => setState(() => _active = v),
+                    title: const Text('Active'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                Expanded(
+                  child: SwitchListTile(
+                    value: _important,
+                    onChanged: (v) => setState(() => _important = v),
+                    title: const Text('Important'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final d = await showDatePicker(
+                        context: context,
+                        initialDate: _dueDate ?? DateTime.now(),
+                        firstDate: DateTime(DateTime.now().year - 1),
+                        lastDate: DateTime(DateTime.now().year + 3),
+                      );
+                      if (d != null) setState(() => _dueDate = d);
+                    },
+                    icon: const Icon(Icons.calendar_month_rounded),
+                    label: Text(_dueDate == null ? 'Pick due date' : 'Due selected'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      _IconPickerSheet.open(
+                        context,
+                        onPick: (key) => setState(() {
+                          _iconKey = key;
+                          _imageUrl = null;
+                        }),
+                      );
+                    },
+                    icon: const Icon(Icons.emoji_emotions_rounded),
+                    label: const Text('Pick icon'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final url = await widget.uploadImage();
+                      if (url == null) return;
+                      setState(() {
+                        _imageUrl = url;
+                        _iconKey = null;
+                      });
+                    },
+                    icon: const Icon(Icons.image_rounded),
+                    label: const Text('Add photo'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Create Task ✨'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Icon picker
+// ============================================================================
+class _IconPickerSheet {
+  static void open(
+    BuildContext context, {
+    required ValueChanged<String> onPick,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _IconPickerContent(onPick: onPick),
+    );
+  }
+}
+
+class _IconPickerContent extends StatelessWidget {
+  final ValueChanged<String> onPick;
+
+  const _IconPickerContent({required this.onPick});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = const [
+      ('star', '⭐'),
+      ('clean', '🧹'),
+      ('homework', '📚'),
+      ('bed', '🛏️'),
+      ('brush', '🪥'),
+      ('trash', '🗑️'),
+      ('pet', '🐶'),
+      ('laundry', '🧺'),
+    ];
+
+    return Container(
+      margin: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: const Color(0xFFE6E8FF)),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 18,
+            color: Color(0x14000000),
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Pick an icon',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final it in items)
+                InkWell(
+                  onTap: () {
+                    onPick(it.$1);
+                    Navigator.pop(context);
+                  },
+                  borderRadius: BorderRadius.circular(18),
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF2FF),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFE6E8FF)),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(it.$2, style: const TextStyle(fontSize: 28)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Empty state
+// ============================================================================
+class _EmptyState extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String buttonText;
+  final VoidCallback onPressed;
+
+  const _EmptyState({
+    required this.title,
+    required this.subtitle,
+    required this.buttonText,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: const Color(0xFFE6E8FF)),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 18,
+              color: Color(0x14000000),
+              offset: Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.auto_awesome_rounded, size: 40),
+            const SizedBox(height: 10),
+            Text(title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 6),
+            Text(subtitle, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: onPressed,
+                style: ElevatedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+                child: Text(buttonText),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// Cute confirm dialog
+// ============================================================================
+class _CuteConfirmDialog extends StatelessWidget {
+  final String title;
+  final String message;
+  final String confirmText;
+  final String cancelText;
+
+  const _CuteConfirmDialog({
+    required this.title,
+    required this.message,
+    required this.confirmText,
+    required this.cancelText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text(cancelText),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(confirmText),
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// Cute background
+// ============================================================================
+class _CuteBokehBackground extends StatelessWidget {
+  const _CuteBokehBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: CustomPaint(
+        painter: _BokehPainter(),
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFFFFFBFF),
+                Color(0xFFF2F5FF),
+                Color(0xFFFFF1F3),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BokehPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..style = PaintingStyle.fill;
+
+    void circle(double x, double y, double r, Color c) {
+      paint.color = c;
+      canvas.drawCircle(Offset(x * size.width, y * size.height), r, paint);
+    }
+
+    circle(0.15, 0.18, 60, const Color(0x22BFD0FF));
+    circle(0.86, 0.16, 70, const Color(0x22FFC6D0));
+    circle(0.82, 0.55, 85, const Color(0x18B8F7D4));
+    circle(0.22, 0.74, 95, const Color(0x18FFD36A));
+    circle(0.58, 0.88, 80, const Color(0x14C1B6FF));
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ============================================================================
+// Bottom nav (Parent)
+// ============================================================================
+class _ParentBottomNav extends StatelessWidget {
+  final VoidCallback onTasks;
+  final VoidCallback onStore;
+  final VoidCallback onMessages;
+  final VoidCallback onSettings;
+
+  const _ParentBottomNav({
+    required this.onTasks,
+    required this.onStore,
+    required this.onMessages,
+    required this.onSettings,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: const Color(0xFFE6E8FF)),
+            boxShadow: const [
+              BoxShadow(
+                blurRadius: 18,
+                color: Color(0x14000000),
+                offset: Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              _NavPill(
+                icon: Icons.checklist_rounded,
+                label: 'Tasks',
+                onTap: onTasks,
+                selected: true,
+              ),
+              const SizedBox(width: 10),
+              _NavPill(
+                icon: Icons.storefront_rounded,
+                label: 'Store',
+                onTap: onStore,
+              ),
+              const SizedBox(width: 10),
+              _NavPill(
+                icon: Icons.chat_bubble_rounded,
+                label: 'Chat',
+                onTap: onMessages,
+              ),
+              const SizedBox(width: 10),
+              _NavPill(
+                icon: Icons.settings_rounded,
+                label: 'Settings',
+                onTap: onSettings,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool selected;
+
+  const _NavPill({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          height: 46,
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFDEE7FF) : const Color(0xFFEFF2FF),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+
+
+===============================
+FILE: lib/screens/child_dashboard_page.dart
+===============================
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'message_page.dart';
+import 'awards_page.dart';
+
+class ChildDashboardPage extends StatefulWidget {
+  final String parentUid;
+  final String childId;
+
+  const ChildDashboardPage({
+    super.key,
+    required this.parentUid,
+    required this.childId,
+  });
+
+  @override
+  State<ChildDashboardPage> createState() => _ChildDashboardPageState();
+}
+
+class _ChildDashboardPageState extends State<ChildDashboardPage> {
+  int _tab = 0; // 0 private, 1 shared
+
+  @override
+  Widget build(BuildContext context) {
+    final parentRef =
+        FirebaseFirestore.instance.collection('parents').doc(widget.parentUid);
+    final childRef = parentRef.collection('children').doc(widget.childId);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFFBF7F6),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            const _CuteBokehBackground(),
+            Column(
+              children: [
+                _ChildTopBar(
+                  title: 'Donezy',
+                  onBack: () => Navigator.of(context).maybePop(),
+                ),
+
+                StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: childRef.snapshots(),
+                  builder: (context, snap) {
+                    final data = snap.data?.data();
+                    final name = (data?['name'] ?? 'Child').toString();
+                    final pts = (data?['points'] ?? 0) as num;
+
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                      child: _ChildHeaderCard(
+                        name: name,
+                        points: pts.toInt(),
+                      ),
+                    );
+                  },
+                ),
+
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                  child: _CuteCard(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _TabPill(
+                            label: 'My Tasks',
+                            selected: _tab == 0,
+                            onTap: () => setState(() => _tab = 0),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _TabPill(
+                            label: 'Family Tasks',
+                            selected: _tab == 1,
+                            onTap: () => setState(() => _tab = 1),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                    child: _tab == 0
+                        ? _ChildPrivateTasks(
+                            parentUid: widget.parentUid,
+                            childId: widget.childId,
+                          )
+                        : _ChildSharedTasks(parentUid: widget.parentUid),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: _BottomNav(
+        onMessages: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => MessagePage(parentUid: widget.parentUid),
+          ),
+        ),
+        onAwards: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AwardsPage(
+              parentUid: widget.parentUid,
+              childId: widget.childId,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =======================================================
+// PRIVATE TASKS (Child) — ONLY ACTIVE + shows Important + icon/image + due date
+// =======================================================
+
+class _ChildPrivateTasks extends StatelessWidget {
+  final String parentUid;
+  final String childId;
+
+  const _ChildPrivateTasks({required this.parentUid, required this.childId});
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = FirebaseFirestore.instance
+        .collection('parents')
+        .doc(parentUid)
+        .collection('children')
+        .doc(childId)
+        .collection('tasksPrivate');
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      // ✅ Only show tasks enabled for the child
+      stream: ref
+          .where('isActive', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .snapshots(),
+      builder: (context, snap) {
+        final docs = snap.data?.docs ?? [];
+        if (docs.isEmpty) {
+          return const _EmptyState(
+              text: 'No tasks yet.\nAsk your parent to add some ✨');
+        }
+
+        return ListView.separated(
+          itemCount: docs.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (context, i) {
+            final d = docs[i];
+            final data = d.data();
+
+            final title = (data['title'] ?? '').toString();
+            final pts = (data['points'] ?? 0) as num;
+            final status = (data['status'] ?? 'open').toString();
+
+            final isImportant = (data['isImportant'] ?? false) as bool;
+            final iconKey = data['iconKey'] as String?;
+            final imageUrl = data['imageUrl'] as String?;
+            final dueTs = data['dueDate'] as Timestamp?;
+            final dueDate = dueTs?.toDate();
+
+            return _CuteTaskTile(
+              title: title,
+              points: pts.toInt(),
+              status: status,
+              isImportant: isImportant,
+              dueDate: dueDate,
+              iconKey: iconKey,
+              imageUrl: imageUrl,
+              trailing: _StatusSetter(
+                onSetStatus: (newStatus) => d.reference.update({
+                  'status': newStatus,
+                  'updatedAt': FieldValue.serverTimestamp(),
+                }),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// =======================================================
+// SHARED TASKS (Child) — ONLY ACTIVE + icon/image + due date + Important badge if present
+// =======================================================
+
+class _ChildSharedTasks extends StatelessWidget {
+  final String parentUid;
+  const _ChildSharedTasks({required this.parentUid});
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = FirebaseFirestore.instance
+        .collection('parents')
+        .doc(parentUid)
+        .collection('tasksShared');
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      // ✅ Only show enabled tasks (if you add isActive there too)
+      stream: ref.orderBy('createdAt', descending: true).snapshots(),
+      builder: (context, snap) {
+        final allDocs = snap.data?.docs ?? [];
+
+        // If your shared tasks also use isActive, filter them safely:
+        final docs = allDocs.where((d) {
+          final data = d.data();
+          final v = data['isActive'];
+          if (v is bool) return v == true;
+          return true; // fallback if field not added yet
+        }).toList();
+
+        if (docs.isEmpty) {
+          return const _EmptyState(text: 'No family tasks yet.');
+        }
+
+        return ListView.separated(
+          itemCount: docs.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (context, i) {
+            final d = docs[i];
+            final data = d.data();
+
+            final title = (data['title'] ?? '').toString();
+            final pts = (data['points'] ?? 0) as num;
+
+            // Optional fields if you add them later
+            final isImportant = (data['isImportant'] ?? false) as bool;
+            final iconKey = data['iconKey'] as String?;
+            final imageUrl = data['imageUrl'] as String?;
+            final dueTs = data['dueDate'] as Timestamp?;
+            final dueDate = dueTs?.toDate();
+
+            return _CuteTaskTile(
+              title: title,
+              points: pts.toInt(),
+              status: null,
+              isImportant: isImportant,
+              dueDate: dueDate,
+              iconKey: iconKey,
+              imageUrl: imageUrl,
+              trailing: null,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// =======================================================
+// Cute Task Tile (Child UI) — matches your new style
+// =======================================================
+
+class _CuteTaskTile extends StatelessWidget {
+  const _CuteTaskTile({
+    required this.title,
+    required this.points,
+    required this.status,
+    required this.isImportant,
+    required this.dueDate,
+    required this.iconKey,
+    required this.imageUrl,
+    required this.trailing,
+  });
+
+  final String title;
+  final int points;
+  final String? status;
+
+  final bool isImportant;
+  final DateTime? dueDate;
+
+  final String? iconKey;
+  final String? imageUrl;
+
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = DonezyTaskIcons.resolve(iconKey);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: const Color(0xFFE9D7D3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _TaskVisual(
+                icon: icon,
+                imageUrl: imageUrl,
+              ),
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 17,
+                              color: Color(0xFF2C2C2C),
+                            ),
+                          ),
+                        ),
+                        if (isImportant) ...[
+                          const SizedBox(width: 8),
+                          _ImportantBadge(),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        _DueDatePill(dueDate: dueDate),
+                        const SizedBox(width: 10),
+                        _PointsPill(points: points),
+                      ],
+                    ),
+                    if (status != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Status: $status',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF6E6E6E),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+
+              if (trailing != null) ...[
+                const SizedBox(width: 10),
+                trailing!,
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TaskVisual extends StatelessWidget {
+  const _TaskVisual({required this.icon, required this.imageUrl});
+
+  final IconData icon;
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 62,
+      height: 62,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4D6),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE9D7D3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: imageUrl != null
+              ? Image.network(
+                  imageUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      Icon(icon, color: const Color(0xFF6E6E6E)),
+                )
+              : Icon(icon, color: const Color(0xFF6E6E6E)),
+        ),
+      ),
+    );
+  }
+}
+
+class _DueDatePill extends StatelessWidget {
+  const _DueDatePill({required this.dueDate});
+  final DateTime? dueDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = dueDate == null ? 'No due date' : _formatDue(dueDate!);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF3FF),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE9D7D3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.calendar_month_rounded,
+              size: 18, color: Color(0xFF4C78FF)),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF50607A),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDue(DateTime d) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dd = DateTime(d.year, d.month, d.day);
+
+    if (dd == today) return 'Today';
+    if (dd == today.add(const Duration(days: 1))) return 'Tomorrow';
+    return '${d.month}/${d.day}/${d.year}';
+  }
+}
+
+class _PointsPill extends StatelessWidget {
+  const _PointsPill({required this.points});
+  final int points;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF6D9),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE9D7D3)),
+      ),
+      child: Text(
+        '$points pts',
+        style: const TextStyle(
+          fontWeight: FontWeight.w900,
+          color: Color(0xFF7A5A00),
+        ),
+      ),
+    );
+  }
+}
+
+class _ImportantBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFE7E1),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFFB4A7)),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.priority_high_rounded,
+              size: 16, color: Color(0xFFFE7A6B)),
+          SizedBox(width: 6),
+          Text(
+            'IMPORTANT',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+              color: Color(0xFFFE7A6B),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =======================================================
+// Status setter (private tasks only)
+// =======================================================
+
+class _StatusSetter extends StatelessWidget {
+  const _StatusSetter({required this.onSetStatus});
+  final void Function(String newStatus) onSetStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      onSelected: onSetStatus,
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'open', child: Text('Open')),
+        PopupMenuItem(value: 'closed', child: Text('Closed')),
+        PopupMenuItem(value: 'late', child: Text('Late')),
+        PopupMenuItem(value: 'completed', child: Text('Completed')),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3F5FF),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE9D7D3)),
+        ),
+        child: const Text(
+          'Set',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
+      ),
+    );
+  }
+}
+
+// =======================================================
+// Bottom nav
+// =======================================================
+
+class _BottomNav extends StatelessWidget {
+  final VoidCallback onMessages;
+  final VoidCallback onAwards;
+
+  const _BottomNav({required this.onMessages, required this.onAwards});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: onMessages,
+                icon: const Icon(Icons.mail_rounded),
+                label: const Text('Messages'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFE7A6B),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  minimumSize: const Size.fromHeight(50),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: onAwards,
+                icon: const Icon(Icons.emoji_events_rounded),
+                label: const Text('Awards'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF2C2C2C),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  side: const BorderSide(color: Color(0xFFE9D7D3)),
+                  minimumSize: const Size.fromHeight(50),
+                  backgroundColor: Colors.white.withOpacity(0.9),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =======================================================
+// Top bar + header card + shared UI
+// =======================================================
+
+class _ChildTopBar extends StatelessWidget {
+  const _ChildTopBar({required this.title, required this.onBack});
+
+  final String title;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+      child: Row(
+        children: [
+          _RoundIconButton(icon: Icons.arrow_back_rounded, onTap: onBack),
+          const Spacer(),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF2C2C2C),
+            ),
+          ),
+          const Spacer(),
+          const SizedBox(width: 54), // keep title centered
+        ],
+      ),
+    );
+  }
+}
+
+class _ChildHeaderCard extends StatelessWidget {
+  const _ChildHeaderCard({required this.name, required this.points});
+
+  final String name;
+  final int points;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CuteCard(
+      child: Row(
+        children: [
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF2FF),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE9D7D3)),
+            ),
+            child: const Icon(Icons.sentiment_satisfied_rounded, size: 30),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Points: $points',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF6E6E6E),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabPill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _TabPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFFFD7CF) : const Color(0xFFF7F1EF),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: selected ? const Color(0xFFFFB4A7) : const Color(0xFFE9D7D3),
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CuteCard extends StatelessWidget {
+  final Widget child;
+  const _CuteCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: const Color(0xFFE9D7D3)),
+        boxShadow: [
+          BoxShadow(
+            blurRadius: 16,
+            color: const Color(0x14000000),
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class _RoundIconButton extends StatelessWidget {
+  const _RoundIconButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withOpacity(0.75),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Color(0xFFE9D7D3)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: SizedBox(
+          width: 54,
+          height: 54,
+          child: Icon(icon, color: const Color(0xFF6E6E6E)),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final String text;
+  const _EmptyState({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontWeight: FontWeight.w800,
+          color: Color(0xFF6E6E6E),
+        ),
+      ),
+    );
+  }
+}
+
+// =======================================================
+// Cute background
+// =======================================================
+
+class _CuteBokehBackground extends StatelessWidget {
+  const _CuteBokehBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFFFFBFA), Color(0xFFFCEFEB)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Stack(
+          children: const [
+            _BokehDot(top: 90, left: 40, size: 170, color: Color(0x33FFC6B8)),
+            _BokehDot(top: 180, right: 20, size: 210, color: Color(0x26FFD7A6)),
+            _BokehDot(bottom: 180, left: 10, size: 220, color: Color(0x1ED3F2FF)),
+            _BokehDot(bottom: 90, right: 40, size: 180, color: Color(0x1EFFC6B8)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BokehDot extends StatelessWidget {
+  const _BokehDot({
+    this.top,
+    this.left,
+    this.right,
+    this.bottom,
+    required this.size,
+    required this.color,
+  });
+
+  final double? top;
+  final double? left;
+  final double? right;
+  final double? bottom;
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: top,
+      left: left,
+      right: right,
+      bottom: bottom,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+}
+
+// =======================================================
+// Icon set (same idea as Parent page) — 20+
+// =======================================================
+
+class DonezyTaskIcons {
+  static const Map<String, IconData> _map = {
+    'sparkle': Icons.auto_awesome_rounded,
+    'broom': Icons.cleaning_services_rounded,
+    'laundry': Icons.local_laundry_service_rounded,
+    'trash': Icons.delete_outline_rounded,
+    'bed': Icons.bed_rounded,
+    'book': Icons.menu_book_rounded,
+    'homework': Icons.edit_note_rounded,
+    'pet': Icons.pets_rounded,
+    'dishes': Icons.local_dining_rounded,
+    'teeth': Icons.emoji_people_rounded,
+    'shower': Icons.shower_rounded,
+    'food': Icons.restaurant_rounded,
+    'water': Icons.water_drop_rounded,
+    'walk': Icons.directions_walk_rounded,
+    'school': Icons.school_rounded,
+    'music': Icons.music_note_rounded,
+    'game': Icons.sports_esports_rounded,
+    'toy': Icons.toys_rounded,
+    'car': Icons.directions_car_rounded,
+    'heart': Icons.favorite_rounded,
+    'star': Icons.star_rounded,
+    'timer': Icons.timer_rounded,
+  };
+
+  static IconData resolve(String? key) {
+    if (key == null) return Icons.auto_awesome_rounded;
+    return _map[key] ?? Icons.auto_awesome_rounded;
+  }
+}
+
+
+
+
+===============================
+FILE: lib/screens/awards_page.dart
+===============================
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+enum AwardsMode { parent, child }
+
+class AwardsPage extends StatelessWidget {
+  static const routeName = '/awards';
+
+  final String parentUid;
+  final String childId;
+  final AwardsMode mode;
+
+  const AwardsPage({
+    super.key,
+    required this.parentUid,
+    required this.childId,
+    this.mode = AwardsMode.parent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final childRef = FirebaseFirestore.instance
+        .collection('parents')
+        .doc(parentUid)
+        .collection('children')
+        .doc(childId);
+
+    final awardsRef = childRef.collection('awards');
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FF),
+      appBar: AppBar(
+        title: Text(mode == AwardsMode.parent ? 'Store (Awards)' : 'Awards'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: childRef.snapshots(),
+          builder: (context, childSnap) {
+            final childData = childSnap.data?.data() ?? {};
+            final childName = (childData['name'] ?? 'Kid').toString();
+            final points = (childData['points'] ?? 0) is int
+                ? (childData['points'] ?? 0) as int
+                : int.tryParse('${childData['points']}') ?? 0;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _HeaderPill(
+                  title: mode == AwardsMode.parent
+                      ? 'Store for $childName'
+                      : 'Hey $childName!',
+                  subtitle: mode == AwardsMode.parent
+                      ? 'Add prizes, set point costs, and make rewards feel magical ✨'
+                      : 'You have $points points. Scroll and claim what you can!',
+                  points: points,
+                  showPoints: mode == AwardsMode.child,
+                ),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: awardsRef
+                        .orderBy('createdAt', descending: true)
+                        .snapshots(),
+                    builder: (context, snap) {
+                      final docs = snap.data?.docs ?? [];
+                      if (docs.isEmpty) {
+                        return Center(
+                          child: Text(
+                            mode == AwardsMode.parent
+                                ? 'No awards yet ✨\nTap + to add one.'
+                                : 'No awards yet ✨',
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
+
+                      return ListView.separated(
+                        itemCount: docs.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 10),
+                        itemBuilder: (context, i) {
+                          final d = docs[i];
+                          final data = d.data();
+
+                          final title = (data['title'] ?? 'Award').toString();
+                          final note = (data['note'] ?? '').toString();
+                          final cost = (data['cost'] ?? 0) is int
+                              ? (data['cost'] ?? 0) as int
+                              : int.tryParse('${data['cost']}') ?? 0;
+                          final isActive = (data['isActive'] ?? true) as bool;
+                          final redeemedAt = data['redeemedAt'];
+
+                          final isRedeemed = redeemedAt != null;
+
+                          // ✅ Child rule: Claim button is only visible if enough points + active + not redeemed
+                          final canClaim =
+                              !isRedeemed && isActive && points >= cost && cost > 0;
+
+                          // ✅ Child rule: hide inactive awards completely (kid shouldn’t see them)
+                          if (mode == AwardsMode.child && !isActive) {
+                            return const SizedBox.shrink();
+                          }
+
+                          return _AwardCard(
+                            title: title,
+                            note: note,
+                            cost: cost,
+                            isActive: isActive,
+                            isRedeemed: isRedeemed,
+                            mode: mode,
+                            canClaim: canClaim,
+                            onClaim: () => _claimAward(
+                              context,
+                              childRef: childRef,
+                              awardRef: d.reference,
+                              cost: cost,
+                            ),
+                            onEdit: () => _openEditAward(
+                              context,
+                              awardRef: d.reference,
+                              initialTitle: title,
+                              initialNote: note,
+                              initialCost: cost,
+                            ),
+                            onToggleActive: (v) =>
+                                d.reference.update({'isActive': v}),
+                            onDelete: () => _confirmDelete(context,
+                                onDelete: () => d.reference.delete()),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+
+      // ✅ Parent-only add button
+      floatingActionButton: mode == AwardsMode.parent
+          ? FloatingActionButton(
+              onPressed: () => _openNewAward(context, awardsRef: awardsRef),
+              child: const Icon(Icons.add),
+            )
+          : null,
+    );
+  }
+
+  Future<void> _openNewAward(
+    BuildContext context, {
+    required CollectionReference<Map<String, dynamic>> awardsRef,
+  }) async {
+    final titleCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    final costCtrl = TextEditingController(text: '50');
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => _AwardDialog(
+        title: 'New award',
+        titleCtrl: titleCtrl,
+        noteCtrl: noteCtrl,
+        costCtrl: costCtrl,
+        confirmText: 'Save',
+      ),
+    );
+
+    if (ok == true) {
+      final title = titleCtrl.text.trim();
+      final note = noteCtrl.text.trim();
+      final cost = int.tryParse(costCtrl.text.trim()) ?? 0;
+      if (title.isEmpty) return;
+
+      await awardsRef.add({
+        'title': title,
+        'note': note,
+        'cost': cost < 0 ? 0 : cost,
+        'isActive': true,
+        'redeemedAt': null,
+        'redeemedBy': null,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  Future<void> _openEditAward(
+    BuildContext context, {
+    required DocumentReference<Map<String, dynamic>> awardRef,
+    required String initialTitle,
+    required String initialNote,
+    required int initialCost,
+  }) async {
+    final titleCtrl = TextEditingController(text: initialTitle);
+    final noteCtrl = TextEditingController(text: initialNote);
+    final costCtrl = TextEditingController(text: initialCost.toString());
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => _AwardDialog(
+        title: 'Edit award',
+        titleCtrl: titleCtrl,
+        noteCtrl: noteCtrl,
+        costCtrl: costCtrl,
+        confirmText: 'Update',
+      ),
+    );
+
+    if (ok == true) {
+      final title = titleCtrl.text.trim();
+      final note = noteCtrl.text.trim();
+      final cost = int.tryParse(costCtrl.text.trim()) ?? 0;
+      if (title.isEmpty) return;
+
+      await awardRef.update({
+        'title': title,
+        'note': note,
+        'cost': cost < 0 ? 0 : cost,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context, {
+    required Future<void> Function() onDelete,
+  }) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: const Text('Delete award?',
+            style: TextStyle(fontWeight: FontWeight.w900)),
+        content: const Text('This will remove the award from the list.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok == true) await onDelete();
+  }
+
+  Future<void> _claimAward(
+    BuildContext context, {
+    required DocumentReference<Map<String, dynamic>> childRef,
+    required DocumentReference<Map<String, dynamic>> awardRef,
+    required int cost,
+  }) async {
+    if (cost <= 0) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: const Text('Claim this award?',
+            style: TextStyle(fontWeight: FontWeight.w900)),
+        content: Text('This costs $cost points.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Not yet')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Claim')),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    try {
+      // ✅ Transaction: deduct points + mark award redeemed (safe)
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final childSnap = await tx.get(childRef);
+        final awardSnap = await tx.get(awardRef);
+
+        final child = childSnap.data() ?? {};
+        final award = awardSnap.data() ?? {};
+
+        final points = (child['points'] ?? 0) is int
+            ? (child['points'] ?? 0) as int
+            : int.tryParse('${child['points']}') ?? 0;
+
+        final redeemedAt = award['redeemedAt'];
+        final isActive = (award['isActive'] ?? true) as bool;
+
+        if (!isActive) throw Exception('This award is not available right now.');
+        if (redeemedAt != null) throw Exception('This award was already redeemed.');
+        if (points < cost) throw Exception('Not enough points.');
+
+        tx.update(childRef, {
+          'points': points - cost,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        tx.update(awardRef, {
+          'redeemedAt': FieldValue.serverTimestamp(),
+          'redeemedBy': childRef.id,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      });
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Redeemed! 🎉 Tell your parent to deliver the prize.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+      }
+    }
+  }
+}
+
+class _HeaderPill extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final int points;
+  final bool showPoints;
+
+  const _HeaderPill({
+    required this.title,
+    required this.subtitle,
+    required this.points,
+    required this.showPoints,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE6E8FF)),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 14,
+            color: Color(0x12000000),
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 6),
+                Text(subtitle),
+              ],
+            ),
+          ),
+          if (showPoints)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF2FF),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Column(
+                children: [
+                  const Text('Points',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text('$points',
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w900)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AwardCard extends StatelessWidget {
+  final String title;
+  final String note;
+  final int cost;
+  final bool isActive;
+  final bool isRedeemed;
+  final AwardsMode mode;
+  final bool canClaim;
+
+  final VoidCallback onClaim;
+  final VoidCallback onEdit;
+  final ValueChanged<bool> onToggleActive;
+  final VoidCallback onDelete;
+
+  const _AwardCard({
+    required this.title,
+    required this.note,
+    required this.cost,
+    required this.isActive,
+    required this.isRedeemed,
+    required this.mode,
+    required this.canClaim,
+    required this.onClaim,
+    required this.onEdit,
+    required this.onToggleActive,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pill = _Pill(
+      text: isRedeemed
+          ? 'Redeemed'
+          : isActive
+              ? 'Available'
+              : 'Hidden',
+      subtle: !isRedeemed && !isActive,
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE6E8FF)),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 12,
+            color: Color(0x12000000),
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(title,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w900)),
+              ),
+              pill,
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _Pill(text: '$cost pts', subtle: true),
+              const SizedBox(width: 8),
+              if (mode == AwardsMode.parent)
+                Switch(
+                  value: isActive,
+                  onChanged: isRedeemed ? null : onToggleActive,
+                ),
+            ],
+          ),
+          if (note.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(note),
+          ],
+          const SizedBox(height: 10),
+          if (mode == AwardsMode.child)
+            if (canClaim)
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: onClaim,
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18)),
+                  ),
+                  child: const Text('Claim'),
+                ),
+              )
+            else
+              const SizedBox.shrink(),
+          if (mode == AwardsMode.parent)
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_rounded),
+                    label: const Text('Edit'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text('Delete'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  final String text;
+  final bool subtle;
+  const _Pill({required this.text, this.subtle = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: subtle ? const Color(0xFFEFF2FF) : const Color(0xFFDEE7FF),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(text, style: const TextStyle(fontWeight: FontWeight.w800)),
+    );
+  }
+}
+
+class _AwardDialog extends StatelessWidget {
+  final String title;
+  final TextEditingController titleCtrl;
+  final TextEditingController noteCtrl;
+  final TextEditingController costCtrl;
+  final String confirmText;
+
+  const _AwardDialog({
+    required this.title,
+    required this.titleCtrl,
+    required this.noteCtrl,
+    required this.costCtrl,
+    required this.confirmText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: titleCtrl,
+            decoration: const InputDecoration(labelText: 'Title'),
+          ),
+          TextField(
+            controller: noteCtrl,
+            decoration: const InputDecoration(labelText: 'Note (optional)'),
+          ),
+          TextField(
+            controller: costCtrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Cost (points)'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel')),
+        ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(confirmText)),
+      ],
+    );
+  }
+}
+
+
+
+
+===============================
+FILE: lib/screens/message_page.dart
+===============================
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+class MessagePage extends StatefulWidget {
+  static const routeName = '/messages';
+
+  final String parentUid;
+  const MessagePage({super.key, required this.parentUid});
+
+  @override
+  State<MessagePage> createState() => _MessagePageState();
+}
+
+class _MessagePageState extends State<MessagePage> {
+  final _ctrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
+
+  Future<void> _send() async {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) return;
+    _ctrl.clear();
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    await FirebaseFirestore.instance
+        .collection('parents')
+        .doc(widget.parentUid)
+        .collection('messages')
+        .add({
+      'text': text,
+      'senderUid': uid,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = FirebaseFirestore.instance
+        .collection('parents')
+        .doc(widget.parentUid)
+        .collection('messages');
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FF),
+      appBar: AppBar(
+        title: const Text('Messages'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: ref.orderBy('createdAt', descending: true).snapshots(),
+              builder: (context, snap) {
+                final docs = snap.data?.docs ?? [];
+                if (docs.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'No messages yet.\nSay hi 👋',
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  controller: _scrollCtrl,
+                  reverse: true,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: docs.length,
+                  itemBuilder: (context, i) {
+                    final d = docs[i];
+                    final text = (d.data()['text'] ?? '').toString();
+                    final sender = (d.data()['senderUid'] ?? '').toString();
+                    final mine = sender == FirebaseAuth.instance.currentUser?.uid;
+
+                    return Align(
+                      alignment:
+                          mine ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 340),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color:
+                              mine ? const Color(0xFFDEE7FF) : Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border:
+                              Border.all(color: const Color(0xFFE6E8FF)),
+                          boxShadow: const [
+                            BoxShadow(
+                              blurRadius: 10,
+                              color: Color(0x12000000),
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Text(text),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _ctrl,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                      decoration: InputDecoration(
+                        hintText: 'Type a message…',
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(18)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide:
+                              const BorderSide(color: Color(0xFFE6E8FF)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFBFD0FF),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: IconButton(
+                      onPressed: _send,
+                      icon: const Icon(Icons.send_rounded),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+}
+
+
+
+
+===============================
+FILE: lib/screens/settings_page.dart
+===============================
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../services/session_store.dart';
+
+class SettingsPage extends StatelessWidget {
+  const SettingsPage({super.key});
+  static const routeName = '/settings';
+
+  Future<void> _logout(BuildContext context) async {
+    await SessionStore.clearAll();
+    await FirebaseAuth.instance.signOut();
+    if (context.mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _resetRole(BuildContext context) async {
+    await SessionStore.clearAll();
+    if (context.mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FF),
+      appBar: AppBar(
+        title: const Text('Settings'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _Tile(
+              title: 'Reset role & session',
+              subtitle: 'Choose Parent/Child again',
+              icon: Icons.restart_alt_rounded,
+              onTap: () => _resetRole(context),
+            ),
+            const SizedBox(height: 10),
+            _Tile(
+              title: 'Log out',
+              subtitle: 'Sign out of this device',
+              icon: Icons.logout_rounded,
+              onTap: () => _logout(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Tile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _Tile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(22),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: const Color(0xFFE6E8FF)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF2FF),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 4),
+                  Text(subtitle),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+
+
+===============================
+FILE: lib/services/session_store.dart
+===============================
+import 'package:shared_preferences/shared_preferences.dart';
+
+enum SessionRole { parent, child }
+
+class SessionData {
+  final SessionRole? role;
+  final String? parentUid;
+  final String? childId;
+
+  const SessionData({
+    this.role,
+    this.parentUid,
+    this.childId,
+  });
+}
+
+class SessionStore {
+  static const _kRole = 'role';
+  static const _kParentUid = 'parentUid';
+  static const _kChildId = 'childId';
+
+  static Future<void> setRole(SessionRole role) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_kRole, role.name);
+  }
+
+  static Future<void> setChildLink({
+    required String parentUid,
+    required String childId,
+  }) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_kParentUid, parentUid);
+    await p.setString(_kChildId, childId);
+  }
+
+  static Future<SessionData> load() async {
+    final p = await SharedPreferences.getInstance();
+    final roleStr = p.getString(_kRole);
+    final parentUid = p.getString(_kParentUid);
+    final childId = p.getString(_kChildId);
+
+    SessionRole? role;
+    if (roleStr != null) {
+      role = SessionRole.values.where((e) => e.name == roleStr).firstOrNull;
+    }
+
+    return SessionData(
+      role: role,
+      parentUid: parentUid,
+      childId: childId,
+    );
+  }
+
+  static Future<void> clearAll() async {
+    final p = await SharedPreferences.getInstance();
+    await p.remove(_kRole);
+    await p.remove(_kParentUid);
+    await p.remove(_kChildId);
+  }
+}
+
+extension _FirstOrNull<E> on Iterable<E> {
+  E? get firstOrNull => isEmpty ? null : first;
+}
+
+
+
+
+===============================
+FILE: lib/services/code_join_service.dart
+===============================
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+class JoinResult {
+  final bool success;
+  final String message;
+  final String? parentUid;
+  final String? childId;
+
+  const JoinResult({
+    required this.success,
+    required this.message,
+    this.parentUid,
+    this.childId,
+  });
+}
+
+class CodeJoinService {
+  static Future<JoinResult> joinWithCode(String code) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return const JoinResult(success: false, message: 'Not signed in.');
+    }
+
+    final trimmed = code.trim().toUpperCase();
+    if (trimmed.isEmpty) {
+      return const JoinResult(success: false, message: 'Enter a code.');
+    }
+
+    final doc = FirebaseFirestore.instance.collection('codes').doc(trimmed);
+    final snap = await doc.get();
+    if (!snap.exists) {
+      return const JoinResult(success: false, message: 'Code not found.');
+    }
+
+    final data = snap.data()!;
+    final isActive = data['isActive'] == true;
+    final type = (data['type'] ?? '').toString();
+    final parentUid = (data['parentUid'] ?? '').toString();
+    final childId = data['childId']?.toString();
+
+    if (!isActive) {
+      return const JoinResult(success: false, message: 'That code is inactive.');
+    }
+
+    if (type == 'householdShared') {
+      return const JoinResult(
+        success: false,
+        message: 'That is a FAMILY code. Enter your KID-XXXXXX code to join your profile.',
+      );
+    }
+
+    if (type != 'childPrivate' || childId == null || childId.isEmpty) {
+      return const JoinResult(success: false, message: 'Invalid code type.');
+    }
+
+    // Create membership record under parent household
+    final membersRef = FirebaseFirestore.instance
+        .collection('parents')
+        .doc(parentUid)
+        .collection('members')
+        .doc(user.uid);
+
+    await membersRef.set({
+      'role': 'child',
+      'childId': childId,
+      'joinedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    return JoinResult(
+      success: true,
+      message: 'Joined!',
+      parentUid: parentUid,
+      childId: childId,
+    );
+  }
+}
+
+
+
+
+===============================
+FILE: lib/services/code_generator.dart
+===============================
+import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+class CodeGenerator {
+  static const _alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
+  static final _rand = Random.secure();
+
+  static String _chunk(int len) {
+    final b = StringBuffer();
+    for (int i = 0; i < len; i++) {
+      b.write(_alphabet[_rand.nextInt(_alphabet.length)]);
+    }
+    return b.toString();
+  }
+
+  static Future<String> generateUniqueHouseholdCode({required String parentUid}) async {
+    return _generateUnique(
+      prefix: 'FAM',
+      parentUid: parentUid,
+      childId: null,
+      type: 'householdShared',
+    );
+  }
+
+  static Future<String> generateUniqueChildCode({
+    required String parentUid,
+    required String childId,
+  }) async {
+    return _generateUnique(
+      prefix: 'KID',
+      parentUid: parentUid,
+      childId: childId,
+      type: 'childPrivate',
+    );
+  }
+
+  static Future<String> _generateUnique({
+    required String prefix,
+    required String parentUid,
+    required String? childId,
+    required String type,
+  }) async {
+    final codes = FirebaseFirestore.instance.collection('codes');
+
+    for (int attempt = 0; attempt < 25; attempt++) {
+      final code = '$prefix-${_chunk(6)}';
+      final doc = codes.doc(code);
+
+      try {
+        await FirebaseFirestore.instance.runTransaction((tx) async {
+          final snap = await tx.get(doc);
+          if (snap.exists) {
+            throw StateError('collision');
+          }
+          tx.set(doc, {
+            'parentUid': parentUid,
+            'childId': childId,
+            'type': type,
+            'isActive': true,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        });
+        return code;
+      } catch (e) {
+        // collision or transient issue; try again
+      }
+    }
+
+    throw Exception('Failed to generate a unique code. Try again.');
+  }
+}
+
+
+
+
+===============================
+FILE: lib/theme/app_theme.dart
+===============================
+*** FILE NOT FOUND ***
+
+
+
+===============================
+FILE: pubspec.yaml
+===============================
+name: donzey_app
+description: A new Flutter project.
+
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  firebase_core: ^4.4.0
+  cloud_firestore: ^6.1.2
+  firebase_auth: ^6.1.4
+  shared_preferences: ^2.2.3
+  firebase_storage: ^13.0.6
+  image_picker: ^1.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+
+
+
+===============================
+FILE: firestore.rules
+===============================
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Donezy: parents/{parentUid}/...
+    match /parents/{parentUid}/{document=**} {
+      allow read, write: if isOwner(parentUid);
+    }
+
+    // Default deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+
+
+
+===============================
+FILE: storage.rules
+===============================
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Parent avatars: /parents/{parentUid}/avatar.jpg
+    match /parents/{parentUid}/{allPaths=**} {
+      allow read, write: if signedIn() && request.auth.uid == parentUid;
+    }
+
+    // Child avatars: /parents/{parentUid}/children/{childId}/avatar.jpg
+    // Parent writes. Child reads only if they're the member for that childId
+    match /parents/{parentUid}/children/{childId}/{allPaths=**} {
+      allow read: if signedIn()
+        && exists(/databases/(default)/documents/parents/$(parentUid)/members/$(request.auth.uid))
+        && (
+          request.auth.uid == parentUid ||
+          get(/databases/(default)/documents/parents/$(parentUid)/members/$(request.auth.uid)).data.childId == childId
+        );
+
+      allow write: if signedIn() && request.auth.uid == parentUid;
+    }
+
+    // Default deny for anything not matched above
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+
+
+
