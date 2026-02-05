@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,6 +13,16 @@ import 'login_page.dart';
 import 'settings_page.dart';
 import 'message_page.dart';
 import 'awards_page.dart';
+
+const _kBackgroundGradient = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [
+    Color(0xFFFFF3E9),
+    Color(0xFFF8F2FF),
+    Color(0xFFF3FBFF),
+  ],
+);
 
 class ParentDashboardPage extends StatefulWidget {
   const ParentDashboardPage({super.key});
@@ -42,211 +53,223 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FF),
+      backgroundColor: const Color(0xFFFFF7F2),
       bottomNavigationBar: _ParentBottomNav(
         onTasks: () {},
         onMessages: _openMessages,
         onAwards: _openAwards,
         onAddTask: _openAddTaskForSelectedChild,
       ),
-      body: SafeArea(
-        child: Column(
+      body: Container(
+        decoration: const BoxDecoration(gradient: _kBackgroundGradient),
+        child: Stack(
           children: [
-            _TopHeader(
-              onLogout: _confirmLogout,
-              onSettings: _openSettings,
-              onPickPhoto: _pickParentPhoto,
-            ),
-            Expanded(
-              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream:
-                    _childrenCol.orderBy('createdAt', descending: false).snapshots(),
-                builder: (context, snap) {
-                  if (!snap.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+            const _PastelBackdrop(),
+            SafeArea(
+              child: Column(
+                children: [
+              _TopHeader(
+                onLogout: _confirmLogout,
+                onSettings: _openSettings,
+                onPickPhoto: _pickParentPhoto,
+              ),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream:
+                      _childrenCol.orderBy('createdAt', descending: false).snapshots(),
+                  builder: (context, snap) {
+                    if (!snap.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                  final children = snap.data!.docs;
+                    final children = snap.data!.docs;
 
-                  if (children.isEmpty) {
-                    return _EmptyState(
-                      title: 'Add your first child',
-                      subtitle:
-                          'Create a child profile so you can start making cute tasks.',
-                      buttonText: 'Create Child',
-                      onPressed: _createChildQuick,
-                    );
-                  }
+                    if (children.isEmpty) {
+                      return _EmptyState(
+                        title: 'Add your first child',
+                        subtitle:
+                            'Create a child profile so you can start making cute tasks.',
+                        buttonText: 'Create Child',
+                        onPressed: _createChildQuick,
+                      );
+                    }
 
-                  _selectedChildId ??= children.first.id;
+                    _selectedChildId ??= children.first.id;
 
-                  QueryDocumentSnapshot<Map<String, dynamic>> selected =
-                      children.first;
-                  final wanted = _selectedChildId;
-                  if (wanted != null) {
-                    for (final d in children) {
-                      if (d.id == wanted) {
-                        selected = d;
-                        break;
+                    QueryDocumentSnapshot<Map<String, dynamic>> selected =
+                        children.first;
+                    final wanted = _selectedChildId;
+                    if (wanted != null) {
+                      for (final d in children) {
+                        if (d.id == wanted) {
+                          selected = d;
+                          break;
+                        }
                       }
                     }
-                  }
-                  _selectedChildId = selected.id;
+                    _selectedChildId = selected.id;
 
-                  final childName =
-                      (selected.data()['name'] ?? 'Child').toString();
-                  final pointsRaw = selected.data()['points'] ?? 0;
-                  final childPoints = pointsRaw is int
-                      ? pointsRaw
-                      : int.tryParse('$pointsRaw') ?? 0;
+                    final childName =
+                        (selected.data()['name'] ?? 'Child').toString();
+                    final pointsRaw = selected.data()['points'] ?? 0;
+                    final childPoints = pointsRaw is int
+                        ? pointsRaw
+                        : int.tryParse('$pointsRaw') ?? 0;
 
-                  return Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-                    child: Column(
-                      children: [
-                        // ✅ Global inbox for reward approvals across all kids
-                        GlobalRewardInbox(parentUid: _user.uid),
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
+                      child: Column(
+                        children: [
+                          // ✅ Global inbox for reward approvals across all kids
+                          GlobalRewardInbox(parentUid: _user.uid),
 
-                        _ChildSelector(
-                          children: children,
-                          selectedChildId: _selectedChildId!,
-                          onSelectChild: (id) =>
-                              setState(() => _selectedChildId = id),
-                          onAddChild: _createChildQuick,
-                        ),
-                        const SizedBox(height: 10),
+                          _ChildSelector(
+                            children: children,
+                            selectedChildId: _selectedChildId!,
+                            onSelectChild: (id) =>
+                                setState(() => _selectedChildId = id),
+                            onAddChild: _createChildQuick,
+                          ),
+                          const SizedBox(height: 12),
 
-                        _KidSummaryCard(name: childName, points: childPoints),
-                        const SizedBox(height: 10),
+                          _ParentHeroCard(name: childName, points: childPoints),
+                          const SizedBox(height: 12),
 
-                        Expanded(
-                          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                            stream: _privateTasksCol(selected.id)
-                                .orderBy('createdAt', descending: false)
-                                .snapshots(),
-                            builder: (context, taskSnap) {
-                              if (!taskSnap.hasData) {
-                                return const Center(
-                                    child: CircularProgressIndicator());
-                              }
-
-                              final docs = taskSnap.data!.docs;
-
-                              if (docs.isEmpty) {
-                                return _EmptyState(
-                                  title: 'No tasks yet ✨',
-                                  subtitle: 'Tap Add Task to create your first one.',
-                                  buttonText: 'Add Task',
-                                  onPressed: () => _openCreateTaskSheet(
-                                    childId: selected.id,
-                                    childName: childName,
-                                  ),
-                                );
-                              }
-
-                              final pending =
-                                  <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-                              final other =
-                                  <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-
-                              for (final d in docs) {
-                                final status =
-                                    (d.data()['status'] ?? 'open').toString();
-                                if (status == 'pending') {
-                                  pending.add(d);
-                                } else {
-                                  other.add(d);
+                          Expanded(
+                            child:
+                                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                              stream: _privateTasksCol(selected.id)
+                                  .orderBy('createdAt', descending: false)
+                                  .snapshots(),
+                              builder: (context, taskSnap) {
+                                if (!taskSnap.hasData) {
+                                  return const Center(
+                                      child: CircularProgressIndicator());
                                 }
-                              }
 
-                              return Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(24),
-                                  border:
-                                      Border.all(color: const Color(0xFFE6E8FF)),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      blurRadius: 14,
-                                      color: Color(0x12000000),
-                                      offset: Offset(0, 8),
+                                final docs = taskSnap.data!.docs;
+
+                                if (docs.isEmpty) {
+                                  return _EmptyState(
+                                    title: 'No tasks yet ✨',
+                                    subtitle:
+                                        'Tap Add Task to create your first one.',
+                                    buttonText: 'Add Task',
+                                    onPressed: () => _openCreateTaskSheet(
+                                      childId: selected.id,
+                                      childName: childName,
                                     ),
-                                  ],
-                                ),
-                                child: Column(
-                                  children: [
-                                    Padding(
-                                      padding:
-                                          const EdgeInsets.fromLTRB(14, 12, 14, 10),
-                                      child: Row(
-                                        children: [
-                                          const Expanded(
-                                            child: Text(
-                                              'Tasks',
-                                              style: TextStyle(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.w900,
+                                  );
+                                }
+
+                                final pending =
+                                    <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                                final other =
+                                    <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
+                                for (final d in docs) {
+                                  final status =
+                                      (d.data()['status'] ?? 'open').toString();
+                                  if (status == 'pending') {
+                                    pending.add(d);
+                                  } else {
+                                    other.add(d);
+                                  }
+                                }
+
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFFBF7),
+                                    borderRadius: BorderRadius.circular(28),
+                                    border: Border.all(
+                                        color: const Color(0xFFFFE1D4)),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        blurRadius: 18,
+                                        color: Color(0x1AD5A6A6),
+                                        offset: Offset(0, 10),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            16, 14, 16, 10),
+                                        child: Row(
+                                          children: [
+                                            const Expanded(
+                                              child: Text(
+                                                'Your Child’s Tasks',
+                                                style: TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.w900,
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                          _SoftButton(
-                                            icon: Icons.add_rounded,
-                                            label: 'Add',
-                                            onTap: () => _openCreateTaskSheet(
-                                              childId: selected.id,
-                                              childName: childName,
+                                            _SoftButton(
+                                              icon: Icons.add_rounded,
+                                              label: 'Add',
+                                              onTap: () => _openCreateTaskSheet(
+                                                childId: selected.id,
+                                                childName: childName,
+                                              ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const Divider(height: 1),
-                                    Expanded(
-                                      child: ListView(
-                                        physics: const BouncingScrollPhysics(),
-                                        padding:
-                                            const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                                        children: [
-                                          if (pending.isNotEmpty) ...[
-                                            _SectionHeader(
-                                              title: 'Needs Review ✨',
-                                              subtitle: '${pending.length} waiting',
-                                              tint: const Color(0xFFFF7AA2),
-                                            ),
-                                            const SizedBox(height: 10),
-                                            ...pending.map((d) => _buildTaskCard(
-                                                  childId: selected.id,
-                                                  taskDoc: d,
-                                                  showApproveReject: true,
-                                                )),
-                                            const SizedBox(height: 8),
                                           ],
-                                          if (other.isNotEmpty) ...[
-                                            _SectionHeader(
-                                              title: 'All Tasks',
-                                              subtitle: '${other.length} total',
-                                              tint: const Color(0xFF17C9B2),
-                                            ),
-                                            const SizedBox(height: 10),
-                                            ...other.map((d) => _buildTaskCard(
-                                                  childId: selected.id,
-                                                  taskDoc: d,
-                                                  showApproveReject: false,
-                                                )),
-                                          ],
-                                        ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
+                                      const Divider(height: 1),
+                                      Expanded(
+                                        child: ListView(
+                                          physics: const BouncingScrollPhysics(),
+                                          padding: const EdgeInsets.fromLTRB(
+                                              12, 12, 12, 12),
+                                          children: [
+                                            if (pending.isNotEmpty) ...[
+                                              _SectionHeader(
+                                                title: 'Needs Review ✨',
+                                                subtitle:
+                                                    '${pending.length} waiting',
+                                                tint: const Color(0xFFFF9ABA),
+                                              ),
+                                              const SizedBox(height: 10),
+                                              ...pending.map((d) =>
+                                                  _buildTaskCard(
+                                                    childId: selected.id,
+                                                    taskDoc: d,
+                                                    showApproveReject: true,
+                                                  )),
+                                              const SizedBox(height: 8),
+                                            ],
+                                            if (other.isNotEmpty) ...[
+                                              _SectionHeader(
+                                                title: 'All Tasks',
+                                                subtitle: '${other.length} total',
+                                                tint: const Color(0xFF5AD3C5),
+                                              ),
+                                              const SizedBox(height: 10),
+                                              ...other.map((d) => _buildTaskCard(
+                                                    childId: selected.id,
+                                                    taskDoc: d,
+                                                    showApproveReject: false,
+                                                  )),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+                ],
               ),
             ),
           ],
@@ -516,6 +539,68 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
 // ============================================================================
 // UI Pieces
 // ============================================================================
+class _PastelBackdrop extends StatelessWidget {
+  const _PastelBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Stack(
+        children: const [
+          Positioned(
+            top: -70,
+            left: -60,
+            child: _SoftBlob(size: 190, color: Color(0x66FFB4C9)),
+          ),
+          Positioned(
+            top: 90,
+            right: -80,
+            child: _SoftBlob(size: 220, color: Color(0x66FFDC9B)),
+          ),
+          Positioned(
+            bottom: 70,
+            left: -90,
+            child: _SoftBlob(size: 240, color: Color(0x668CEBD7)),
+          ),
+          Positioned(
+            bottom: -120,
+            right: -80,
+            child: _SoftBlob(size: 260, color: Color(0x669CCBFF)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SoftBlob extends StatelessWidget {
+  final double size;
+  final Color color;
+  const _SoftBlob({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return ImageFiltered(
+      imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 36,
+              color: Color(0x22FFFFFF),
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _TopHeader extends StatelessWidget {
   final VoidCallback onLogout;
   final VoidCallback onSettings;
@@ -530,7 +615,7 @@ class _TopHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Row(
         children: [
           _CircleIconButton(icon: Icons.logout_rounded, onTap: onLogout),
@@ -538,24 +623,40 @@ class _TopHeader extends StatelessWidget {
             child: Column(
               children: [
                 const Text('Donezy ✨',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 6),
+                    style: TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF4B3F4E))),
+                const SizedBox(height: 4),
+                Text('Parent dashboard',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black.withOpacity(0.55))),
+                const SizedBox(height: 8),
                 GestureDetector(
                   onTap: onPickPhoto,
                   child: Container(
-                    width: 46,
-                    height: 46,
+                    width: 52,
+                    height: 52,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [
-                          Color(0xFFFF7AA2),
-                          Color(0xFFFFC84A),
-                          Color(0xFF17C9B2)
+                          Color(0xFFFFB4C9),
+                          Color(0xFFFFD88B),
+                          Color(0xFF8CEBD7)
                         ],
                       ),
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: const [
+                        BoxShadow(
+                          blurRadius: 12,
+                          color: Color(0x1AEBB0A4),
+                          offset: Offset(0, 6),
+                        ),
+                      ],
                     ),
-                    child: const Icon(Icons.photo_camera_rounded, color: Colors.white),
+                    child:
+                        const Icon(Icons.photo_camera_rounded, color: Colors.white),
                   ),
                 ),
               ],
@@ -579,14 +680,21 @@ class _CircleIconButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(999),
       child: Container(
-        width: 44,
-        height: 44,
+        width: 46,
+        height: 46,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFFFFFBF7),
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: const Color(0xFFE6E8FF)),
+          border: Border.all(color: const Color(0xFFF1D8CB)),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 10,
+              color: Color(0x14D8B5AE),
+              offset: Offset(0, 6),
+            ),
+          ],
         ),
-        child: Icon(icon),
+        child: Icon(icon, color: const Color(0xFF4C3C42)),
       ),
     );
   }
@@ -629,17 +737,20 @@ class _ChildSelector extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: selected ? const Color(0xFFDEE7FF) : Colors.white,
+                      color:
+                          selected ? const Color(0xFFFFE3D6) : const Color(0xFFFFFBF7),
                       borderRadius: BorderRadius.circular(22),
-                      border: Border.all(color: const Color(0xFFE6E8FF)),
+                      border: Border.all(
+                          color:
+                              selected ? const Color(0xFFFFC8B4) : const Color(0xFFF1D8CB)),
                     ),
                     child: Text(
                       name,
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
                         color: selected
-                            ? Colors.black.withOpacity(0.85)
-                            : Colors.black.withOpacity(0.70),
+                            ? const Color(0xFF4C3C42)
+                            : const Color(0xFF6E5C64),
                       ),
                     ),
                   ),
@@ -655,11 +766,11 @@ class _ChildSelector extends StatelessWidget {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: const Color(0xFFFFFBF7),
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: const Color(0xFFE6E8FF)),
+                border: Border.all(color: const Color(0xFFF1D8CB)),
               ),
-              child: const Icon(Icons.add_rounded),
+              child: const Icon(Icons.add_rounded, color: Color(0xFF4C3C42)),
             ),
           ),
         ],
@@ -668,36 +779,210 @@ class _ChildSelector extends StatelessWidget {
   }
 }
 
-class _KidSummaryCard extends StatelessWidget {
+class _ParentHeroCard extends StatelessWidget {
   final String name;
   final int points;
-  const _KidSummaryCard({required this.name, required this.points});
+  const _ParentHeroCard({required this.name, required this.points});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient:
-            const LinearGradient(colors: [Color(0xFFFFF0C8), Color(0xFFBFF6E9)]),
-        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFE7DB), Color(0xFFFBE7FF)],
+        ),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.white.withOpacity(0.55)),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 16,
+            color: Color(0x1AD6B6B0),
+            offset: Offset(0, 10),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          const Icon(Icons.face_rounded, size: 34),
-          const SizedBox(width: 10),
+          const _HeroSticker(),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(name,
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.75),
-              borderRadius: BorderRadius.circular(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your Child’s Tasks',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                    color: Colors.black.withOpacity(0.78),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                    color: Color(0xFF4C3C42),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Cheer them on with sweet little tasks ✨',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black.withOpacity(0.55),
+                  ),
+                ),
+              ],
             ),
-            child: Text('$points pts ✨',
-                style: const TextStyle(fontWeight: FontWeight.w900)),
+          ),
+          const SizedBox(width: 10),
+          _TotalPointsPill(points: points),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroSticker extends StatelessWidget {
+  const _HeroSticker();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 78,
+      height: 78,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.70),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: const Color(0x33FFFFFF)),
+            ),
+          ),
+          Positioned.fill(
+            child: Center(
+              child: Icon(
+                Icons.favorite_rounded,
+                size: 44,
+                color: const Color(0xFFFF9ABA).withOpacity(0.45),
+              ),
+            ),
+          ),
+          const Positioned(
+            left: 10,
+            top: 12,
+            child: _MiniAvatar(
+              icon: Icons.person_rounded,
+              color: Color(0xFFFFC07A),
+            ),
+          ),
+          const Positioned(
+            right: 10,
+            top: 12,
+            child: _MiniAvatar(
+              icon: Icons.child_care_rounded,
+              color: Color(0xFF8CEBD7),
+            ),
+          ),
+          Positioned(
+            left: 22,
+            bottom: -8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFB4C9), Color(0xFFFFD88B)],
+                ),
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: const [
+                  BoxShadow(
+                    blurRadius: 12,
+                    color: Color(0x22FFC07A),
+                    offset: Offset(0, 8),
+                  )
+                ],
+              ),
+              child: const Icon(
+                Icons.checklist_rounded,
+                size: 18,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniAvatar extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  const _MiniAvatar({required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.65),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(icon, size: 16, color: const Color(0xFF4C3C42)),
+    );
+  }
+}
+
+class _TotalPointsPill extends StatelessWidget {
+  final int points;
+  const _TotalPointsPill({required this.points});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFB56A), Color(0xFFFF9ABA)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 12,
+            color: Color(0x22FFB56A),
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Total: $points pts',
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.25),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: const Icon(
+              Icons.add_rounded,
+              size: 18,
+              color: Colors.white,
+            ),
           ),
         ],
       ),
@@ -718,9 +1003,16 @@ class _SectionHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: tint.withOpacity(0.10),
+        color: tint.withOpacity(0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: tint.withOpacity(0.18)),
+        border: Border.all(color: tint.withOpacity(0.24)),
+        boxShadow: [
+          BoxShadow(
+            blurRadius: 8,
+            color: tint.withOpacity(0.12),
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -801,25 +1093,43 @@ class _TaskCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final completed = status == 'completed';
     final pending = status == 'pending';
+    final disabledToggles = completed || pending;
 
-    final pillText = completed
+    final statusLabel = completed
         ? 'Completed'
         : pending
             ? 'Needs Review'
             : !isActive
-                ? 'Inactive'
+                ? 'Paused'
                 : 'Open';
 
+    final statusTint = completed
+        ? const Color(0xFF5AD3C5)
+        : pending
+            ? const Color(0xFFFF9ABA)
+            : !isActive
+                ? const Color(0xFFBFA7C6)
+                : const Color(0xFFFFC07A);
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 12, 10, 10),
       decoration: BoxDecoration(
-        color: completed ? const Color(0xFFF1FFF6) : Colors.white,
+        color: completed ? const Color(0xFFF0FFF6) : const Color(0xFFFFF9F4),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE6E8FF)),
+        border: Border.all(color: const Color(0xFFF1D8CB)),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 12,
+            color: Color(0x14D8B5AE),
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _TaskVisual(iconKey: iconKey, imageUrl: imageUrl),
               const SizedBox(width: 10),
@@ -827,107 +1137,100 @@ class _TaskCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 3),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _Pill(text: '$points pts', subtle: true),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.black.withOpacity(0.80),
+                            ),
+                          ),
+                        ),
                         const SizedBox(width: 8),
-                        _Pill(text: pillText, subtle: !(completed || pending)),
-                        const SizedBox(width: 8),
-                        if (isImportant)
-                          const _Pill(text: 'Important', subtle: false),
+                        _PointsPill(
+                          points: points,
+                          completed: completed,
+                        ),
                       ],
                     ),
-                    if (dueDate != null) ...[
+                    if (note.isNotEmpty) ...[
                       const SizedBox(height: 6),
-                      Text('Due: ${_fmtDate(dueDate!)}',
-                          style: const TextStyle(fontSize: 12)),
+                      Text(
+                        note,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black.withOpacity(0.55),
+                        ),
+                      ),
                     ],
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _ActionChip(
+                          icon: isImportant
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
+                          label: isImportant ? 'Added!' : 'Add Important',
+                          tint: const Color(0xFFFFD88B),
+                          onTap: disabledToggles
+                              ? null
+                              : () => onToggleImportant(!isImportant),
+                        ),
+                        _ActionChip(
+                          icon: Icons.calendar_month_rounded,
+                          label: dueDate == null
+                              ? 'Select Date'
+                              : _fmtPrettyDate(dueDate!),
+                          tint: const Color(0xFFEFF2FF),
+                          trailing: Icons.keyboard_arrow_down_rounded,
+                          onTap: onPickDue,
+                        ),
+                        _StatusChip(
+                          text: statusLabel,
+                          tint: statusTint,
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-              IconButton(
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline_rounded)),
-            ],
-          ),
-          if (note.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Align(alignment: Alignment.centerLeft, child: Text(note)),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onPickDue,
-                  icon: const Icon(Icons.calendar_month_rounded),
-                  label: const Text('Due'),
-                  style: OutlinedButton.styleFrom(
-                    shape:
-                        RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              const SizedBox(width: 8),
+              Column(
+                children: [
+                  _HeartToggle(
+                    value: isActive,
+                    onChanged:
+                        disabledToggles ? null : (v) => onToggleActive(v),
                   ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onPickIcon,
-                  icon: const Icon(Icons.emoji_emotions_rounded),
-                  label: const Text('Icon'),
-                  style: OutlinedButton.styleFrom(
-                    shape:
-                        RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  const SizedBox(height: 8),
+                  _TaskMenuButton(
+                    onPickIcon: onPickIcon,
+                    onPickImage: onPickImage,
+                    onDelete: onDelete,
                   ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onPickImage,
-                  icon: const Icon(Icons.image_rounded),
-                  label: const Text('Photo'),
-                  style: OutlinedButton.styleFrom(
-                    shape:
-                        RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: SwitchListTile(
-                  value: isActive,
-                  onChanged: (completed || pending) ? null : onToggleActive,
-                  title: const Text('Active'),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              Expanded(
-                child: SwitchListTile(
-                  value: isImportant,
-                  onChanged: (completed || pending) ? null : onToggleImportant,
-                  title: const Text('Important'),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
+                ],
               ),
             ],
           ),
           if (pending)
-            Row(
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
                     onPressed: onReject,
                     style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF6E5C64),
+                      side: const BorderSide(color: Color(0xFFF1D8CB)),
                       shape:
                           RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                     ),
@@ -939,6 +1242,8 @@ class _TaskCard extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: onApprove,
                     style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFB56A),
+                      foregroundColor: Colors.white,
                       shape:
                           RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                     ),
@@ -946,16 +1251,324 @@ class _TaskCard extends StatelessWidget {
                   ),
                 ),
               ],
+              ),
             ),
         ],
       ),
     );
   }
 
-  static String _fmtDate(DateTime d) {
-    final mm = d.month.toString().padLeft(2, '0');
-    final dd = d.day.toString().padLeft(2, '0');
-    return '${d.year}-$mm-$dd';
+  static String _fmtPrettyDate(DateTime d) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(d.year, d.month, d.day);
+
+    String prefix;
+    if (target == today) {
+      prefix = 'Today';
+    } else if (target == today.add(const Duration(days: 1))) {
+      prefix = 'Tomorrow';
+    } else if (target == today.subtract(const Duration(days: 1))) {
+      prefix = 'Yesterday';
+    } else {
+      prefix = _kWeekdays[d.weekday - 1];
+    }
+
+    return '$prefix, ${_kMonths[d.month - 1]} ${d.day}';
+  }
+
+  static const _kMonths = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  static const _kWeekdays = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+  ];
+}
+
+class _PointsPill extends StatelessWidget {
+  final int points;
+  final bool completed;
+  const _PointsPill({required this.points, required this.completed});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = completed
+        ? const [Color(0xFF8CEBD7), Color(0xFF5AD3C5)]
+        : const [Color(0xFFFFB56A), Color(0xFFFF9ABA)];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 10,
+            color: Color(0x1AFFB56A),
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Text(
+        '+$points pts',
+        style: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w900,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  final String text;
+  final Color tint;
+  const _StatusChip({required this.text, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: tint.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: tint.withOpacity(0.28)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w900,
+          color: Colors.black.withOpacity(0.70),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color tint;
+  final IconData? trailing;
+  final VoidCallback? onTap;
+  const _ActionChip({
+    required this.icon,
+    required this.label,
+    required this.tint,
+    required this.onTap,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    final fg = enabled ? const Color(0xFF4C3C42) : const Color(0xFF8B7A82);
+
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: tint.withOpacity(0.22),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: tint.withOpacity(0.35)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: fg),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: fg,
+                ),
+              ),
+              if (trailing != null) ...[
+                const SizedBox(width: 6),
+                Icon(trailing, size: 18, color: fg.withOpacity(0.75)),
+              ]
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeartToggle extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+  const _HeartToggle({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onChanged != null;
+    final bgOn = const Color(0xFF8CEBD7);
+    final bgOff = const Color(0xFFE7DADF);
+    final track = value ? bgOn : bgOff;
+
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: GestureDetector(
+        onTap: enabled ? () => onChanged!(!value) : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          width: 58,
+          height: 34,
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: track,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: const [
+              BoxShadow(
+                blurRadius: 12,
+                color: Color(0x1A000000),
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Align(
+                  alignment:
+                      value ? Alignment.centerLeft : Alignment.centerRight,
+                  child: Icon(
+                    Icons.favorite_rounded,
+                    size: 16,
+                    color: Colors.white.withOpacity(value ? 0.55 : 0.35),
+                  ),
+                ),
+              ),
+              AnimatedAlign(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                alignment:
+                    value ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    value
+                        ? Icons.check_rounded
+                        : Icons.close_rounded,
+                    size: 16,
+                    color: const Color(0xFF4C3C42),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _TaskMenuAction { icon, photo, delete }
+
+class _TaskMenuButton extends StatelessWidget {
+  final VoidCallback onPickIcon;
+  final VoidCallback onPickImage;
+  final VoidCallback onDelete;
+  const _TaskMenuButton({
+    required this.onPickIcon,
+    required this.onPickImage,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_TaskMenuAction>(
+      tooltip: 'More',
+      onSelected: (v) {
+        switch (v) {
+          case _TaskMenuAction.icon:
+            onPickIcon();
+            break;
+          case _TaskMenuAction.photo:
+            onPickImage();
+            break;
+          case _TaskMenuAction.delete:
+            onDelete();
+            break;
+        }
+      },
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: _TaskMenuAction.icon,
+          child: Row(
+            children: [
+              Icon(Icons.emoji_emotions_rounded),
+              SizedBox(width: 10),
+              Text('Change icon'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: _TaskMenuAction.photo,
+          child: Row(
+            children: [
+              Icon(Icons.image_rounded),
+              SizedBox(width: 10),
+              Text('Add photo'),
+            ],
+          ),
+        ),
+        PopupMenuDivider(),
+        PopupMenuItem(
+          value: _TaskMenuAction.delete,
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline_rounded),
+              SizedBox(width: 10),
+              Text('Delete'),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        width: 40,
+        height: 34,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBF7),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFF1D8CB)),
+        ),
+        child: const Icon(Icons.more_horiz_rounded, color: Color(0xFF4C3C42)),
+      ),
+    );
   }
 }
 
@@ -972,13 +1585,31 @@ class _TaskVisual extends StatelessWidget {
       width: 56,
       height: 56,
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF2FF),
+        gradient: const LinearGradient(
+          colors: [Color(0x66FFB4C9), Color(0x66FFDC9B), Color(0x668CEBD7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0x33FFFFFF)),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 10,
+            color: Color(0x14D8B5AE),
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       clipBehavior: Clip.antiAlias,
       child: hasImage
           ? Image.network(imageUrl!, fit: BoxFit.cover)
-          : Center(child: Icon(_iconForKey(iconKey), size: 26)),
+          : Center(
+              child: Icon(
+                _iconForKey(iconKey),
+                size: 26,
+                color: const Color(0xFF4C3C42),
+              ),
+            ),
     );
   }
 
@@ -996,25 +1627,6 @@ class _TaskVisual extends StatelessWidget {
       default:
         return Icons.auto_awesome_rounded;
     }
-  }
-}
-
-class _Pill extends StatelessWidget {
-  final String text;
-  final bool subtle;
-  const _Pill({required this.text, required this.subtle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: subtle ? const Color(0xFFEFF2FF) : const Color(0xFFFFE0EA),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Text(text,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
-    );
   }
 }
 
@@ -1038,9 +1650,16 @@ class _ParentBottomNav extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: const Color(0xFFE6E8FF)),
+          color: const Color(0xFFFFFBF7),
+          border: Border.all(color: const Color(0xFFF1D8CB)),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 14,
+              color: Color(0x12D8B5AE),
+              offset: Offset(0, -2),
+            ),
+          ],
         ),
         child: Row(
           children: [
@@ -1081,7 +1700,7 @@ class _NavBubble extends StatelessWidget {
             height: 44,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFFF7AA2), Color(0xFFFFC84A), Color(0xFF17C9B2)],
+                colors: [Color(0xFFFFB4C9), Color(0xFFFFD88B), Color(0xFF8CEBD7)],
               ),
               borderRadius: BorderRadius.circular(18),
             ),
@@ -1113,7 +1732,7 @@ class _BigAddButton extends StatelessWidget {
         height: 54,
         decoration: BoxDecoration(
           gradient:
-              const LinearGradient(colors: [Color(0xFF17C9B2), Color(0xFFFFC84A)]),
+              const LinearGradient(colors: [Color(0xFF8CEBD7), Color(0xFFFFC07A)]),
           borderRadius: BorderRadius.circular(26),
         ),
         child: const Center(
@@ -1144,37 +1763,134 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(18),
+      borderSide: const BorderSide(color: Color(0xFFF1D8CB)),
+    );
+
+    InputDecoration decor({
+      required String label,
+      required IconData icon,
+      String? hint,
+    }) {
+      return InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: Icon(icon, color: const Color(0xFF6E5C64)),
+        filled: true,
+        fillColor: const Color(0xFFFFF3EC),
+        border: border,
+        enabledBorder: border,
+        focusedBorder: border.copyWith(
+          borderSide: const BorderSide(color: Color(0xFFFFB56A), width: 2),
+        ),
+      );
+    }
+
     return Padding(
       padding: MediaQuery.of(context).viewInsets,
       child: Container(
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(26)),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFFFBF7), Color(0xFFFFF2EA)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: const Color(0xFFF1D8CB)),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 18,
+              color: Color(0x1AD5A6A6),
+              offset: Offset(0, -2),
+            ),
+          ],
+        ),
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('New Task for ${widget.childName} ✨',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+            Container(
+              width: 44,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
             const SizedBox(height: 12),
-            TextField(controller: _title, decoration: const InputDecoration(labelText: 'Task title')),
-            TextField(controller: _note, decoration: const InputDecoration(labelText: 'Note (optional)')),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'New Task for ${widget.childName} ✨',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                InkWell(
+                  onTap: () => Navigator.pop(context),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBF7),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFF1D8CB)),
+                    ),
+                    child: const Icon(Icons.close_rounded),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _title,
+              decoration: decor(
+                label: 'Task name',
+                icon: Icons.edit_rounded,
+                hint: 'e.g. Fold and put away laundry',
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _note,
+              decoration: decor(
+                label: 'Note (optional)',
+                icon: Icons.sticky_note_2_rounded,
+              ),
+            ),
+            const SizedBox(height: 10),
             TextField(
               controller: _points,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Points'),
+              decoration: decor(
+                label: 'Points',
+                icon: Icons.auto_awesome_rounded,
+                hint: '5',
+              ),
             ),
-            const SizedBox(height: 10),
-            SwitchListTile(
-              value: _important,
-              onChanged: (v) => setState(() => _important = v),
-              title: const Text('Important'),
-              contentPadding: EdgeInsets.zero,
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _ActionChip(
+                icon: _important
+                    ? Icons.star_rounded
+                    : Icons.star_outline_rounded,
+                label: _important ? 'Important' : 'Add Important',
+                tint: const Color(0xFFFFD88B),
+                onTap: () => setState(() => _important = !_important),
+              ),
             ),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               height: 48,
-              child: ElevatedButton(
-                onPressed: () async {
+              child: InkWell(
+                onTap: () async {
                   final t = _title.text.trim();
                   if (t.isEmpty) return;
                   final p = int.tryParse(_points.text.trim()) ?? 0;
@@ -1182,7 +1898,32 @@ class _CreateTaskSheetState extends State<_CreateTaskSheet> {
                   if (!context.mounted) return;
                   Navigator.pop(context);
                 },
-                child: const Text('Create Task 🎀'),
+                borderRadius: BorderRadius.circular(18),
+                child: Ink(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF8CEBD7), Color(0xFFFFB56A)],
+                    ),
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: const [
+                      BoxShadow(
+                        blurRadius: 14,
+                        color: Color(0x1A8CEBD7),
+                        offset: Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text(
+                      '+ Add New Task',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15.5,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -1267,13 +2008,23 @@ class _SoftButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-            color: const Color(0xFFEFF2FF),
-            borderRadius: BorderRadius.circular(18)),
+          color: const Color(0xFFFFEADD),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 10,
+              color: Color(0x12D8B5AE),
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
         child: Row(
           children: [
-            Icon(icon, size: 20),
+            Icon(icon, size: 20, color: const Color(0xFF6E5C64)),
             const SizedBox(width: 6),
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+            Text(label,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFF6E5C64))),
           ],
         ),
       ),
@@ -1352,17 +2103,37 @@ class _EmptyState extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         margin: const EdgeInsets.symmetric(horizontal: 20),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(26)),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBF7),
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: const Color(0xFFF1D8CB)),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 16,
+              color: Color(0x1AD8B5AE),
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_rounded, size: 52, color: Color(0xFFB9D7FF)),
+            const Icon(Icons.cloud_rounded, size: 56, color: Color(0xFFBFA7C6)),
             const SizedBox(height: 10),
             Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
             const SizedBox(height: 6),
             Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
-            ElevatedButton(onPressed: onPressed, child: Text(buttonText)),
+            ElevatedButton(
+              onPressed: onPressed,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFB56A),
+                foregroundColor: Colors.white,
+                shape:
+                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              child: Text(buttonText),
+            ),
           ],
         ),
       ),
