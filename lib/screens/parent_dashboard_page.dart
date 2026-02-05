@@ -38,6 +38,8 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
   final _storage = FirebaseStorage.instance;
 
   String? _selectedChildId;
+  bool _deleteMode = false;
+  final Set<String> _selectedTaskIds = {};
 
   User get _user => _auth.currentUser!;
 
@@ -52,8 +54,21 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundGradient = isDark
+        ? const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF1C1A22),
+              Color(0xFF24212B),
+              Color(0xFF1E222D),
+            ],
+          )
+        : _kBackgroundGradient;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF7F2),
+      backgroundColor: isDark ? const Color(0xFF1E1B22) : const Color(0xFFFFF7F2),
       bottomNavigationBar: _ParentBottomNav(
         onTasks: () {},
         onMessages: _openMessages,
@@ -61,215 +76,234 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
         onAddTask: _openAddTaskForSelectedChild,
       ),
       body: Container(
-        decoration: const BoxDecoration(gradient: _kBackgroundGradient),
+        decoration: BoxDecoration(gradient: backgroundGradient),
         child: Stack(
           children: [
             const _PastelBackdrop(),
             SafeArea(
-              child: Column(
-                children: [
-              _TopHeader(
-                onLogout: _confirmLogout,
-                onSettings: _openSettings,
-                onPickPhoto: _pickParentPhoto,
-              ),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream:
-                      _childrenCol.orderBy('createdAt', descending: false).snapshots(),
-                  builder: (context, snap) {
-                    if (!snap.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream:
+                    _childrenCol.orderBy('createdAt', descending: false).snapshots(),
+                builder: (context, snap) {
+                  if (!snap.hasData) {
+                    return Column(
+                      children: [
+                        _TopHeader(
+                          onLogout: _confirmLogout,
+                          onSettings: _openSettings,
+                          onPickPhoto: _pickParentPhoto,
+                          childName: 'Your Family',
+                          points: 0,
+                        ),
+                        const Expanded(
+                          child: Center(child: CircularProgressIndicator()),
+                        ),
+                      ],
+                    );
+                  }
 
-                    final children = snap.data!.docs;
+                  final children = snap.data!.docs;
 
-                    if (children.isEmpty) {
-                      return _EmptyState(
-                        title: 'Add your first child',
-                        subtitle:
-                            'Create a child profile so you can start making cute tasks.',
-                        buttonText: 'Create Child',
-                        onPressed: _createChildQuick,
-                      );
-                    }
-
-                    _selectedChildId ??= children.first.id;
-
-                    QueryDocumentSnapshot<Map<String, dynamic>> selected =
-                        children.first;
-                    final wanted = _selectedChildId;
-                    if (wanted != null) {
-                      for (final d in children) {
-                        if (d.id == wanted) {
-                          selected = d;
-                          break;
-                        }
-                      }
-                    }
-                    _selectedChildId = selected.id;
-
-                    final childName =
-                        (selected.data()['name'] ?? 'Child').toString();
-                    final pointsRaw = selected.data()['points'] ?? 0;
-                    final childPoints = pointsRaw is int
-                        ? pointsRaw
-                        : int.tryParse('$pointsRaw') ?? 0;
-
+                  if (children.isEmpty) {
                     return Padding(
                       padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
                       child: Column(
                         children: [
-                          // ✅ Global inbox for reward approvals across all kids
-                          GlobalRewardInbox(parentUid: _user.uid),
-
-                          _ChildSelector(
-                            children: children,
-                            selectedChildId: _selectedChildId!,
-                            onSelectChild: (id) =>
-                                setState(() => _selectedChildId = id),
-                            onAddChild: _createChildQuick,
+                          _TopHeader(
+                            onLogout: _confirmLogout,
+                            onSettings: _openSettings,
+                            onPickPhoto: _pickParentPhoto,
+                            childName: 'Your Family',
+                            points: 0,
                           ),
                           const SizedBox(height: 12),
-
-                          _ParentHeroCard(name: childName, points: childPoints),
+                          _ChildSelector(
+                            children: children,
+                            selectedChildId: null,
+                            onSelectChild: (_) {},
+                            onAddChild: _createChildQuick,
+                            onSelectFamily: _showFamilyTasks,
+                          ),
                           const SizedBox(height: 12),
-
                           Expanded(
-                            child:
-                                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                              stream: _privateTasksCol(selected.id)
-                                  .orderBy('createdAt', descending: false)
-                                  .snapshots(),
-                              builder: (context, taskSnap) {
-                                if (!taskSnap.hasData) {
-                                  return const Center(
-                                      child: CircularProgressIndicator());
-                                }
-
-                                final docs = taskSnap.data!.docs;
-
-                                if (docs.isEmpty) {
-                                  return _EmptyState(
-                                    title: 'No tasks yet ✨',
-                                    subtitle:
-                                        'Tap Add Task to create your first one.',
-                                    buttonText: 'Add Task',
-                                    onPressed: () => _openCreateTaskSheet(
-                                      childId: selected.id,
-                                      childName: childName,
-                                    ),
-                                  );
-                                }
-
-                                final pending =
-                                    <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-                                final other =
-                                    <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-
-                                for (final d in docs) {
-                                  final status =
-                                      (d.data()['status'] ?? 'open').toString();
-                                  if (status == 'pending') {
-                                    pending.add(d);
-                                  } else {
-                                    other.add(d);
-                                  }
-                                }
-
-                                return Container(
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFFBF7),
-                                    borderRadius: BorderRadius.circular(28),
-                                    border: Border.all(
-                                        color: const Color(0xFFFFE1D4)),
-                                    boxShadow: const [
-                                      BoxShadow(
-                                        blurRadius: 18,
-                                        color: Color(0x1AD5A6A6),
-                                        offset: Offset(0, 10),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                            16, 14, 16, 10),
-                                        child: Row(
-                                          children: [
-                                            const Expanded(
-                                              child: Text(
-                                                'Your Child’s Tasks',
-                                                style: TextStyle(
-                                                  fontSize: 18,
-                                                  fontWeight: FontWeight.w900,
-                                                ),
-                                              ),
-                                            ),
-                                            _SoftButton(
-                                              icon: Icons.add_rounded,
-                                              label: 'Add',
-                                              onTap: () => _openCreateTaskSheet(
-                                                childId: selected.id,
-                                                childName: childName,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const Divider(height: 1),
-                                      Expanded(
-                                        child: ListView(
-                                          physics: const BouncingScrollPhysics(),
-                                          padding: const EdgeInsets.fromLTRB(
-                                              12, 12, 12, 12),
-                                          children: [
-                                            if (pending.isNotEmpty) ...[
-                                              _SectionHeader(
-                                                title: 'Needs Review ✨',
-                                                subtitle:
-                                                    '${pending.length} waiting',
-                                                tint: const Color(0xFFFF9ABA),
-                                              ),
-                                              const SizedBox(height: 10),
-                                              ...pending.map((d) =>
-                                                  _buildTaskCard(
-                                                    childId: selected.id,
-                                                    taskDoc: d,
-                                                    showApproveReject: true,
-                                                  )),
-                                              const SizedBox(height: 8),
-                                            ],
-                                            if (other.isNotEmpty) ...[
-                                              _SectionHeader(
-                                                title: 'All Tasks',
-                                                subtitle: '${other.length} total',
-                                                tint: const Color(0xFF5AD3C5),
-                                              ),
-                                              const SizedBox(height: 10),
-                                              ...other.map((d) => _buildTaskCard(
-                                                    childId: selected.id,
-                                                    taskDoc: d,
-                                                    showApproveReject: false,
-                                                  )),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
+                            child: _EmptyState(
+                              title: 'Add your first child',
+                              subtitle:
+                                  'Create a child profile so you can start making cute tasks.',
+                              buttonText: 'Create Child',
+                              onPressed: _createChildQuick,
                             ),
                           ),
                         ],
                       ),
                     );
-                  },
-                ),
-              ),
-                ],
+                  }
+
+                  _selectedChildId ??= children.first.id;
+
+                  QueryDocumentSnapshot<Map<String, dynamic>> selected =
+                      children.first;
+                  final wanted = _selectedChildId;
+                  if (wanted != null) {
+                    for (final d in children) {
+                      if (d.id == wanted) {
+                        selected = d;
+                        break;
+                      }
+                    }
+                  }
+                  _selectedChildId = selected.id;
+
+                  final childName =
+                      (selected.data()['name'] ?? 'Child').toString();
+                  final pointsRaw = selected.data()['points'] ?? 0;
+                  final childPoints =
+                      pointsRaw is int ? pointsRaw : int.tryParse('$pointsRaw') ?? 0;
+
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
+                    child: Column(
+                      children: [
+                        _TopHeader(
+                          onLogout: _confirmLogout,
+                          onSettings: _openSettings,
+                          onPickPhoto: _pickParentPhoto,
+                          childName: childName,
+                          points: childPoints,
+                        ),
+                        const SizedBox(height: 12),
+                        _ChildSelector(
+                          children: children,
+                          selectedChildId: _selectedChildId,
+                          onSelectChild: (id) => setState(() {
+                            _selectedChildId = id;
+                            _deleteMode = false;
+                            _selectedTaskIds.clear();
+                          }),
+                          onAddChild: _createChildQuick,
+                          onSelectFamily: _showFamilyTasks,
+                        ),
+                        const SizedBox(height: 12),
+                        // ✅ Global inbox for reward approvals across all kids
+                        GlobalRewardInbox(parentUid: _user.uid),
+                        const SizedBox(height: 10),
+                        Expanded(
+                          child:
+                              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                            stream: _privateTasksCol(selected.id)
+                                .orderBy('createdAt', descending: false)
+                                .snapshots(),
+                            builder: (context, taskSnap) {
+                              if (!taskSnap.hasData) {
+                                return const Center(
+                                    child: CircularProgressIndicator());
+                              }
+
+                              final docs = taskSnap.data!.docs;
+
+                              if (docs.isEmpty) {
+                                return _EmptyState(
+                                  title: 'No tasks yet ✨',
+                                  subtitle:
+                                      'Tap Add Task to create your first one.',
+                                  buttonText: 'Add Task',
+                                  onPressed: () => _openCreateTaskSheet(
+                                    childId: selected.id,
+                                    childName: childName,
+                                  ),
+                                );
+                              }
+
+                              final pending =
+                                  <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+                              final other =
+                                  <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
+                              for (final d in docs) {
+                                final status =
+                                    (d.data()['status'] ?? 'open').toString();
+                                if (status == 'pending') {
+                                  pending.add(d);
+                                } else {
+                                  other.add(d);
+                                }
+                              }
+
+                              return Column(
+                                children: [
+                                  Expanded(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? const Color(0xFF2A2632)
+                                            : const Color(0xFFFFFBF7),
+                                        borderRadius: BorderRadius.circular(28),
+                                        border: Border.all(
+                                          color: isDark
+                                              ? const Color(0xFF3A3341)
+                                              : const Color(0xFFFFE1D4),
+                                        ),
+                                        boxShadow: const [
+                                          BoxShadow(
+                                            blurRadius: 18,
+                                            color: Color(0x1AD5A6A6),
+                                            offset: Offset(0, 10),
+                                          ),
+                                        ],
+                                      ),
+                                      child: ListView(
+                                        physics: const BouncingScrollPhysics(),
+                                        padding: const EdgeInsets.fromLTRB(
+                                            12, 12, 12, 12),
+                                        children: [
+                                          if (pending.isNotEmpty) ...[
+                                            _SectionHeader(
+                                              title: 'Needs Review ✨',
+                                              subtitle: '${pending.length} waiting',
+                                              tint: const Color(0xFFFF9ABA),
+                                            ),
+                                            const SizedBox(height: 10),
+                                            ...pending.map((d) => _buildTaskCard(
+                                                  childId: selected.id,
+                                                  taskDoc: d,
+                                                  showApproveReject: true,
+                                                )),
+                                            const SizedBox(height: 8),
+                                          ],
+                                          if (other.isNotEmpty) ...[
+                                            _SectionHeader(
+                                              title: 'All Tasks',
+                                              subtitle: '${other.length} total',
+                                              tint: const Color(0xFF5AD3C5),
+                                            ),
+                                            const SizedBox(height: 10),
+                                            ...other.map((d) => _buildTaskCard(
+                                                  childId: selected.id,
+                                                  taskDoc: d,
+                                                  showApproveReject: false,
+                                                )),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _BulkActionsBar(
+                                    deleteMode: _deleteMode,
+                                    selectedCount: _selectedTaskIds.length,
+                                    onToggleDeleteMode: _toggleDeleteMode,
+                                    onDeleteSelected: () =>
+                                        _confirmBulkDelete(childId: selected.id),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
           ],
@@ -311,6 +345,17 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
         dueDate: dueDate,
         iconKey: iconKey,
         imageUrl: imageUrl.isEmpty ? null : imageUrl,
+        showSelection: _deleteMode,
+        isSelected: _selectedTaskIds.contains(taskDoc.id),
+        onToggleSelected: _deleteMode
+            ? () => setState(() {
+                  if (_selectedTaskIds.contains(taskDoc.id)) {
+                    _selectedTaskIds.remove(taskDoc.id);
+                  } else {
+                    _selectedTaskIds.add(taskDoc.id);
+                  }
+                })
+            : null,
         onDelete: () => _confirmDeleteTask(childId: childId, taskId: taskDoc.id),
         onToggleActive: (v) => _privateTasksCol(childId).doc(taskDoc.id).update({
           'isActive': v,
@@ -333,6 +378,46 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
             showApproveReject ? () => _approvePending(childId, taskDoc.id, points) : null,
         onReject: showApproveReject ? () => _rejectPending(childId, taskDoc.id) : null,
       ),
+    );
+  }
+
+  void _toggleDeleteMode() {
+    setState(() {
+      _deleteMode = !_deleteMode;
+      if (!_deleteMode) {
+        _selectedTaskIds.clear();
+      }
+    });
+  }
+
+  Future<void> _confirmBulkDelete({required String childId}) async {
+    if (_selectedTaskIds.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => _RuledConfirmDialog(
+        title: 'Delete selected tasks?',
+        message:
+            'These ${_selectedTaskIds.length} tasks will be removed forever.',
+        confirmText: 'Delete',
+        cancelText: 'Keep',
+      ),
+    );
+
+    if (ok == true) {
+      for (final id in _selectedTaskIds) {
+        await _privateTasksCol(childId).doc(id).delete();
+      }
+      if (!mounted) return;
+      setState(() {
+        _selectedTaskIds.clear();
+        _deleteMode = false;
+      });
+    }
+  }
+
+  void _showFamilyTasks() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Family tasks view is coming soon! 🌟')),
     );
   }
 
@@ -605,64 +690,181 @@ class _TopHeader extends StatelessWidget {
   final VoidCallback onLogout;
   final VoidCallback onSettings;
   final VoidCallback onPickPhoto;
+  final String childName;
+  final int points;
 
   const _TopHeader({
     required this.onLogout,
     required this.onSettings,
     required this.onPickPhoto,
+    required this.childName,
+    required this.points,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor =
+        isDark ? const Color(0xFF2A2632) : const Color(0xFFFFFBF7);
+    final borderColor =
+        isDark ? const Color(0xFF3A3341) : const Color(0xFFFFE1D4);
+    final headlineColor =
+        isDark ? Colors.white : const Color(0xFF4B3F4E);
+    final subColor =
+        isDark ? Colors.white70 : Colors.black.withOpacity(0.55);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: Row(
-        children: [
-          _CircleIconButton(icon: Icons.logout_rounded, onTap: onLogout),
-          Expanded(
-            child: Column(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: borderColor),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 18,
+              color: Color(0x1AD5A6A6),
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
               children: [
-                const Text('Donezy ✨',
-                    style: TextStyle(
-                        fontSize: 21,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF4B3F4E))),
-                const SizedBox(height: 4),
-                Text('Parent dashboard',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black.withOpacity(0.55))),
-                const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: onPickPhoto,
-                  child: Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [
-                          Color(0xFFFFB4C9),
-                          Color(0xFFFFD88B),
-                          Color(0xFF8CEBD7)
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: const [
-                        BoxShadow(
-                          blurRadius: 12,
-                          color: Color(0x1AEBB0A4),
-                          offset: Offset(0, 6),
+                _CircleIconButton(icon: Icons.logout_rounded, onTap: onLogout),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Text(
+                        'Donezy ✨',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: headlineColor,
                         ),
-                      ],
-                    ),
-                    child:
-                        const Icon(Icons.photo_camera_rounded, color: Colors.white),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('Parent dashboard',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, color: subColor)),
+                    ],
                   ),
+                ),
+                _CircleIconButton(
+                  icon: Icons.settings_rounded,
+                  onTap: onSettings,
                 ),
               ],
             ),
+            const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                GestureDetector(
+                  onTap: onPickPhoto,
+                  child: const _IllustrationBadge(),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Your Child’s Tasks',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 16,
+                          color: headlineColor,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        childName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                          color: headlineColor,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Sweet, playful chores with gentle reminders.',
+                        style: TextStyle(fontWeight: FontWeight.w700, color: subColor),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _TotalPointsPill(points: points),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IllustrationBadge extends StatelessWidget {
+  const _IllustrationBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 86,
+      height: 86,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFFE1F0), Color(0xFFFFF2D8), Color(0xFFE0FFF5)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: const Color(0x33FFFFFF)),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 16,
+            color: Color(0x1AEBB0A4),
+            offset: Offset(0, 8),
           ),
-          _CircleIconButton(icon: Icons.settings_rounded, onTap: onSettings),
+        ],
+      ),
+      child: Stack(
+        children: const [
+          Positioned.fill(
+            child: Icon(
+              Icons.favorite_rounded,
+              size: 44,
+              color: Color(0x55FF9ABA),
+            ),
+          ),
+          Positioned(
+            left: 10,
+            top: 12,
+            child: _MiniAvatar(
+              icon: Icons.person_rounded,
+              color: Color(0xFFFFC07A),
+            ),
+          ),
+          Positioned(
+            right: 10,
+            top: 12,
+            child: _MiniAvatar(
+              icon: Icons.child_care_rounded,
+              color: Color(0xFF8CEBD7),
+            ),
+          ),
+          Positioned(
+            left: 22,
+            bottom: 8,
+            child: Icon(
+              Icons.checklist_rounded,
+              size: 24,
+              color: Color(0xFF4C3C42),
+            ),
+          ),
         ],
       ),
     );
@@ -676,6 +878,11 @@ class _CircleIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF2F2A36) : const Color(0xFFFFFBF7);
+    final border = isDark ? const Color(0xFF3A3341) : const Color(0xFFF1D8CB);
+    final iconColor = isDark ? Colors.white : const Color(0xFF4C3C42);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(999),
@@ -683,9 +890,9 @@ class _CircleIconButton extends StatelessWidget {
         width: 46,
         height: 46,
         decoration: BoxDecoration(
-          color: const Color(0xFFFFFBF7),
+          color: bg,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: const Color(0xFFF1D8CB)),
+          border: Border.all(color: border),
           boxShadow: const [
             BoxShadow(
               blurRadius: 10,
@@ -694,7 +901,7 @@ class _CircleIconButton extends StatelessWidget {
             ),
           ],
         ),
-        child: Icon(icon, color: const Color(0xFF4C3C42)),
+        child: Icon(icon, color: iconColor),
       ),
     );
   }
@@ -702,19 +909,22 @@ class _CircleIconButton extends StatelessWidget {
 
 class _ChildSelector extends StatelessWidget {
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> children;
-  final String selectedChildId;
+  final String? selectedChildId;
   final ValueChanged<String> onSelectChild;
   final VoidCallback onAddChild;
+  final VoidCallback onSelectFamily;
 
   const _ChildSelector({
     required this.children,
     required this.selectedChildId,
     required this.onSelectChild,
     required this.onAddChild,
+    required this.onSelectFamily,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SizedBox(
       height: 62,
       child: Row(
@@ -723,12 +933,45 @@ class _ChildSelector extends StatelessWidget {
             child: ListView.separated(
               physics: const BouncingScrollPhysics(),
               scrollDirection: Axis.horizontal,
-              itemCount: children.length,
+              itemCount: children.length + 1,
               separatorBuilder: (_, __) => const SizedBox(width: 10),
               itemBuilder: (context, i) {
+                if (i == children.length) {
+                  return InkWell(
+                    onTap: onSelectFamily,
+                    borderRadius: BorderRadius.circular(22),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFE6F4FF), Color(0xFFFBE7FF)],
+                        ),
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(color: const Color(0xFFCCE8FF)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.groups_rounded,
+                              size: 18, color: Color(0xFF4C3C42)),
+                          SizedBox(width: 6),
+                          Text(
+                            'Family Tasks',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFF4C3C42),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
                 final d = children[i];
                 final name = (d.data()['name'] ?? 'Child').toString();
-                final selected = d.id == selectedChildId;
+                final selected = selectedChildId != null && d.id == selectedChildId;
 
                 return InkWell(
                   onTap: () => onSelectChild(d.id),
@@ -737,12 +980,15 @@ class _ChildSelector extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color:
-                          selected ? const Color(0xFFFFE3D6) : const Color(0xFFFFFBF7),
+                      color: selected
+                          ? const Color(0xFFFFE3D6)
+                          : const Color(0xFFFFFBF7),
                       borderRadius: BorderRadius.circular(22),
                       border: Border.all(
-                          color:
-                              selected ? const Color(0xFFFFC8B4) : const Color(0xFFF1D8CB)),
+                        color: selected
+                            ? const Color(0xFFFFC8B4)
+                            : const Color(0xFFF1D8CB),
+                      ),
                     ),
                     child: Text(
                       name,
@@ -766,11 +1012,16 @@ class _ChildSelector extends StatelessWidget {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: const Color(0xFFFFFBF7),
+                color: isDark ? const Color(0xFF2F2A36) : const Color(0xFFFFFBF7),
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: const Color(0xFFF1D8CB)),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF3A3341) : const Color(0xFFF1D8CB),
+                ),
               ),
-              child: const Icon(Icons.add_rounded, color: Color(0xFF4C3C42)),
+              child: Icon(
+                Icons.add_rounded,
+                color: isDark ? Colors.white : const Color(0xFF4C3C42),
+              ),
             ),
           ),
         ],
@@ -945,12 +1196,15 @@ class _TotalPointsPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final gradient = isDark
+        ? const LinearGradient(colors: [Color(0xFF7BDFF2), Color(0xFFA5B8FF)])
+        : const LinearGradient(colors: [Color(0xFFFFB56A), Color(0xFFFF9ABA)]);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFB56A), Color(0xFFFF9ABA)],
-        ),
+        gradient: gradient,
         borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(
@@ -964,7 +1218,7 @@ class _TotalPointsPill extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Total: $points pts',
+            'Total $points pts',
             style: const TextStyle(
               fontWeight: FontWeight.w900,
               color: Colors.white,
@@ -1000,6 +1254,7 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
@@ -1030,17 +1285,145 @@ class _SectionHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w900, fontSize: 15.5)),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 15.5,
+                    color: isDark ? Colors.white : const Color(0xFF2B2B2B),
+                  ),
+                ),
                 const SizedBox(height: 2),
                 Text(subtitle,
                     style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: Colors.black.withOpacity(0.60))),
+                        color: isDark
+                            ? Colors.white70
+                            : Colors.black.withOpacity(0.60))),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BulkActionsBar extends StatelessWidget {
+  final bool deleteMode;
+  final int selectedCount;
+  final VoidCallback onToggleDeleteMode;
+  final VoidCallback onDeleteSelected;
+
+  const _BulkActionsBar({
+    required this.deleteMode,
+    required this.selectedCount,
+    required this.onToggleDeleteMode,
+    required this.onDeleteSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF2A2632) : const Color(0xFFFFF7F2);
+    final border = isDark ? const Color(0xFF3A3341) : const Color(0xFFFFE1D4);
+    final textColor = isDark ? Colors.white : const Color(0xFF4C3C42);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: border),
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 12,
+            color: Color(0x1AD5A6A6),
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          InkWell(
+            onTap: onToggleDeleteMode,
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: deleteMode
+                    ? const LinearGradient(
+                        colors: [Color(0xFFFFC7D9), Color(0xFFFFE3B0)],
+                      )
+                    : const LinearGradient(
+                        colors: [Color(0xFFEFF2FF), Color(0xFFFFF1E5)],
+                      ),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: deleteMode
+                      ? const Color(0xFFFFB4C9)
+                      : const Color(0xFFE1D7F3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    deleteMode ? Icons.delete_rounded : Icons.delete_outline_rounded,
+                    size: 18,
+                    color: textColor,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    deleteMode ? 'Delete Mode' : 'Delete Mode',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: textColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Spacer(),
+          if (deleteMode) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF3A3341) : const Color(0xFFFFFBF7),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: border),
+              ),
+              child: Text(
+                '$selectedCount selected',
+                style: TextStyle(fontWeight: FontWeight.w900, color: textColor),
+              ),
+            ),
+            const SizedBox(width: 10),
+            InkWell(
+              onTap: selectedCount > 0 ? onDeleteSelected : null,
+              borderRadius: BorderRadius.circular(16),
+              child: Opacity(
+                opacity: selectedCount > 0 ? 1 : 0.45,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF9ABA), Color(0xFFFFB56A)],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Text(
+                    'Delete Selected',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1058,6 +1441,9 @@ class _TaskCard extends StatelessWidget {
 
   final String iconKey;
   final String? imageUrl;
+  final bool showSelection;
+  final bool isSelected;
+  final VoidCallback? onToggleSelected;
 
   final VoidCallback onDelete;
   final ValueChanged<bool> onToggleActive;
@@ -1079,6 +1465,9 @@ class _TaskCard extends StatelessWidget {
     required this.dueDate,
     required this.iconKey,
     required this.imageUrl,
+    required this.showSelection,
+    required this.isSelected,
+    required this.onToggleSelected,
     required this.onDelete,
     required this.onToggleActive,
     required this.onToggleImportant,
@@ -1091,6 +1480,7 @@ class _TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final completed = status == 'completed';
     final pending = status == 'pending';
     final disabledToggles = completed || pending;
@@ -1111,12 +1501,21 @@ class _TaskCard extends StatelessWidget {
                 ? const Color(0xFFBFA7C6)
                 : const Color(0xFFFFC07A);
 
+    final cardColor = completed
+        ? (isDark ? const Color(0xFF203029) : const Color(0xFFF0FFF6))
+        : (isDark ? const Color(0xFF2E2935) : const Color(0xFFFFF9F4));
+    final borderColor =
+        isDark ? const Color(0xFF3A3341) : const Color(0xFFF1D8CB);
+    final titleColor = isDark ? Colors.white : Colors.black.withOpacity(0.80);
+    final noteColor =
+        isDark ? Colors.white70 : Colors.black.withOpacity(0.55);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 10, 10),
       decoration: BoxDecoration(
-        color: completed ? const Color(0xFFF0FFF6) : const Color(0xFFFFF9F4),
+        color: cardColor,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFF1D8CB)),
+        border: Border.all(color: borderColor),
         boxShadow: const [
           BoxShadow(
             blurRadius: 12,
@@ -1146,7 +1545,7 @@ class _TaskCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 15.5,
                               fontWeight: FontWeight.w900,
-                              color: Colors.black.withOpacity(0.80),
+                              color: titleColor,
                             ),
                           ),
                         ),
@@ -1155,17 +1554,49 @@ class _TaskCard extends StatelessWidget {
                           points: points,
                           completed: completed,
                         ),
+                        if (showSelection) ...[
+                          const SizedBox(width: 8),
+                          InkWell(
+                            onTap: onToggleSelected,
+                            borderRadius: BorderRadius.circular(12),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? const Color(0xFF8CEBD7)
+                                    : (isDark
+                                        ? const Color(0xFF3A3341)
+                                        : const Color(0xFFFFF3EC)),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? const Color(0xFF6FDCC9)
+                                      : borderColor,
+                                ),
+                              ),
+                              child: Icon(
+                                isSelected
+                                    ? Icons.check_rounded
+                                    : Icons.check_box_outline_blank_rounded,
+                                size: 18,
+                                color: isSelected
+                                    ? const Color(0xFF2B4D44)
+                                    : (isDark ? Colors.white70 : titleColor),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     if (note.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Text(
                         note,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: Colors.black.withOpacity(0.55),
+                          color: noteColor,
                         ),
                       ),
                     ],
@@ -1346,6 +1777,7 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -1358,7 +1790,7 @@ class _StatusChip extends StatelessWidget {
         style: TextStyle(
           fontSize: 12.5,
           fontWeight: FontWeight.w900,
-          color: Colors.black.withOpacity(0.70),
+          color: isDark ? Colors.white70 : Colors.black.withOpacity(0.70),
         ),
       ),
     );
@@ -1382,7 +1814,10 @@ class _ActionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
-    final fg = enabled ? const Color(0xFF4C3C42) : const Color(0xFF8B7A82);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = enabled
+        ? (isDark ? Colors.white : const Color(0xFF4C3C42))
+        : (isDark ? Colors.white54 : const Color(0xFF8B7A82));
 
     return Opacity(
       opacity: enabled ? 1 : 0.55,
@@ -1392,7 +1827,7 @@ class _ActionChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: tint.withOpacity(0.22),
+            color: tint.withOpacity(isDark ? 0.18 : 0.22),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: tint.withOpacity(0.35)),
           ),
@@ -1509,6 +1944,7 @@ class _TaskMenuButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return PopupMenuButton<_TaskMenuAction>(
       tooltip: 'More',
       onSelected: (v) {
@@ -1562,11 +1998,16 @@ class _TaskMenuButton extends StatelessWidget {
         width: 40,
         height: 34,
         decoration: BoxDecoration(
-          color: const Color(0xFFFFFBF7),
+          color: isDark ? const Color(0xFF2F2A36) : const Color(0xFFFFFBF7),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFF1D8CB)),
+          border: Border.all(
+            color: isDark ? const Color(0xFF3A3341) : const Color(0xFFF1D8CB),
+          ),
         ),
-        child: const Icon(Icons.more_horiz_rounded, color: Color(0xFF4C3C42)),
+        child: Icon(
+          Icons.more_horiz_rounded,
+          color: isDark ? Colors.white : const Color(0xFF4C3C42),
+        ),
       ),
     );
   }
@@ -1580,16 +2021,23 @@ class _TaskVisual extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       width: 56,
       height: 56,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0x66FFB4C9), Color(0x66FFDC9B), Color(0x668CEBD7)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: isDark
+            ? const LinearGradient(
+                colors: [Color(0x663B3550), Color(0x66536B7A), Color(0x665C7A6E)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : const LinearGradient(
+                colors: [Color(0x66FFB4C9), Color(0x66FFDC9B), Color(0x668CEBD7)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0x33FFFFFF)),
         boxShadow: const [
@@ -1645,13 +2093,16 @@ class _ParentBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SafeArea(
       top: false,
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFFBF7),
-          border: Border.all(color: const Color(0xFFF1D8CB)),
+          color: isDark ? const Color(0xFF26212C) : const Color(0xFFFFFBF7),
+          border: Border.all(
+            color: isDark ? const Color(0xFF3A3341) : const Color(0xFFF1D8CB),
+          ),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
           boxShadow: const [
             BoxShadow(
@@ -1669,10 +2120,17 @@ class _ParentBottomNav extends StatelessWidget {
             Expanded(child: _BigAddButton(onTap: onAddTask)),
             Expanded(
                 child: _NavBubble(
-                    icon: Icons.chat_bubble_rounded, label: 'Messages', onTap: onMessages)),
+                    icon: Icons.chat_bubble_rounded,
+                    label: 'Messages',
+                    onTap: onMessages,
+                    showBadge: true,
+                    badgeText: '•')),
             Expanded(
                 child: _NavBubble(
-                    icon: Icons.emoji_events_rounded, label: 'Awards', onTap: onAwards)),
+                    icon: Icons.emoji_events_rounded,
+                    label: 'Awards',
+                    onTap: onAwards,
+                    glow: true)),
           ],
         ),
       ),
@@ -1684,33 +2142,89 @@ class _NavBubble extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final bool showBadge;
+  final String badgeText;
+  final bool glow;
 
-  const _NavBubble({required this.icon, required this.label, required this.onTap});
+  const _NavBubble({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.showBadge = false,
+    this.badgeText = '',
+    this.glow = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFFFB4C9), Color(0xFFFFD88B), Color(0xFF8CEBD7)],
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFFFFB4C9),
+                      Color(0xFFFFD88B),
+                      Color(0xFF8CEBD7)
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: glow
+                      ? const [
+                          BoxShadow(
+                            blurRadius: 16,
+                            color: Color(0x55FFC86F),
+                            offset: Offset(0, 6),
+                          ),
+                        ]
+                      : const [],
+                ),
+                child: Icon(icon, color: Colors.white),
               ),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Icon(icon, color: Colors.white),
+              if (showBadge)
+                Positioned(
+                  right: -4,
+                  top: -4,
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF6B9A),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF26212C) : Colors.white,
+                        width: 2,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      badgeText,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(label,
               style: TextStyle(
                 fontWeight: FontWeight.w900,
-                color: Colors.black.withOpacity(0.70),
+                color: isDark ? Colors.white70 : Colors.black.withOpacity(0.70),
                 fontSize: 12.5,
               )),
         ],
@@ -1725,19 +2239,38 @@ class _BigAddButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(26),
       child: Container(
-        height: 54,
+        height: 58,
         decoration: BoxDecoration(
           gradient:
               const LinearGradient(colors: [Color(0xFF8CEBD7), Color(0xFFFFC07A)]),
           borderRadius: BorderRadius.circular(26),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 16,
+              color: Color(0x338CEBD7),
+              offset: Offset(0, 8),
+            ),
+          ],
         ),
-        child: const Center(
-          child: Text('+ Add Task',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+        child: Center(
+          child: Text(
+            '+ Add New Task',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 13.5,
+              shadows: isDark
+                  ? const [
+                      Shadow(color: Color(0x55000000), blurRadius: 6),
+                    ]
+                  : null,
+            ),
+          ),
         ),
       ),
     );
@@ -2032,6 +2565,132 @@ class _SoftButton extends StatelessWidget {
   }
 }
 
+class _RuledConfirmDialog extends StatelessWidget {
+  final String title;
+  final String message;
+  final String confirmText;
+  final String cancelText;
+
+  const _RuledConfirmDialog({
+    required this.title,
+    required this.message,
+    required this.confirmText,
+    required this.cancelText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final paperColor =
+        isDark ? const Color(0xFF2A2632) : const Color(0xFFFFFBF7);
+    final borderColor =
+        isDark ? const Color(0xFF3A3341) : const Color(0xFFFFE1D4);
+    final textColor = isDark ? Colors.white : const Color(0xFF4C3C42);
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(26),
+        child: Stack(
+          children: [
+            CustomPaint(
+              painter: _RuledPaperPainter(
+                lineColor: isDark
+                    ? const Color(0xFF3A3341)
+                    : const Color(0xFFEADBD3),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: paperColor,
+                  borderRadius: BorderRadius.circular(26),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      message,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: textColor.withOpacity(0.75),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: textColor,
+                              side: BorderSide(color: borderColor),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: Text(cancelText),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFFB56A),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: Text(confirmText),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RuledPaperPainter extends CustomPainter {
+  final Color lineColor;
+  const _RuledPaperPainter({required this.lineColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = lineColor
+      ..strokeWidth = 1;
+    const spacing = 22.0;
+    for (double y = spacing; y < size.height; y += spacing) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RuledPaperPainter oldDelegate) {
+    return oldDelegate.lineColor != lineColor;
+  }
+}
+
 class _ConfirmDialog extends StatelessWidget {
   final String title;
   final String message;
@@ -2099,14 +2758,17 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Container(
         padding: const EdgeInsets.all(16),
         margin: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFFBF7),
+          color: isDark ? const Color(0xFF2A2632) : const Color(0xFFFFFBF7),
           borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: const Color(0xFFF1D8CB)),
+          border: Border.all(
+            color: isDark ? const Color(0xFF3A3341) : const Color(0xFFF1D8CB),
+          ),
           boxShadow: const [
             BoxShadow(
               blurRadius: 16,
@@ -2118,11 +2780,29 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.cloud_rounded, size: 56, color: Color(0xFFBFA7C6)),
+            Icon(
+              Icons.cloud_rounded,
+              size: 56,
+              color: isDark ? const Color(0xFFBFA7C6) : const Color(0xFFBFA7C6),
+            ),
             const SizedBox(height: 10),
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: isDark ? Colors.white : const Color(0xFF4C3C42),
+              ),
+            ),
             const SizedBox(height: 6),
-            Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white70 : const Color(0xFF6E5C64),
+              ),
+            ),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: onPressed,
