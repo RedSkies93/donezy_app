@@ -1,76 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../services/session_store.dart';
-import '../services/code_generator.dart';
-import 'child_join_page.dart';
 import 'parent_dashboard_page.dart';
+import 'child_join_page.dart';
 
-class RoleSelectPage extends StatefulWidget {
+class RoleSelectPage extends StatelessWidget {
   const RoleSelectPage({super.key});
   static const routeName = '/role';
 
-  @override
-  State<RoleSelectPage> createState() => _RoleSelectPageState();
-}
-
-class _RoleSelectPageState extends State<RoleSelectPage> {
-  bool _busy = false;
-  String? _error;
-
-  Future<void> _chooseParent() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('Not signed in.');
-
-      // Make sure parent doc exists (create shared code if missing)
-      final parents = FirebaseFirestore.instance.collection('parents');
-      final ref = parents.doc(user.uid);
-      final snap = await ref.get();
-
-      if (!snap.exists) {
-        final sharedCode = await CodeGenerator.generateUniqueHouseholdCode(parentUid: user.uid);
-        await ref.set({
-          'displayName': user.email ?? 'Parent',
-          'photoUrl': null,
-          'sharedCode': sharedCode,
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      // mark member role
-      await ref.collection('members').doc(user.uid).set({
-        'role': 'parent',
-        'childId': null,
-        'joinedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      await SessionStore.setRole(SessionRole.parent);
-
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const ParentDashboardPage()),
-      );
-    } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+  Future<void> _setParent(BuildContext context) async {
+    await SessionStore.setRole(SessionRole.parent);
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const ParentDashboardPage()),
+      (_) => false,
+    );
   }
 
-  Future<void> _chooseChild() async {
-    setState(() => _error = null);
+  Future<void> _setChild(BuildContext context) async {
     await SessionStore.setRole(SessionRole.child);
-
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
+    if (!context.mounted) return;
+    Navigator.push(
+      context,
       MaterialPageRoute(builder: (_) => const ChildJoinPage()),
     );
   }
@@ -79,101 +31,82 @@ class _RoleSelectPageState extends State<RoleSelectPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FF),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            children: [
-              const SizedBox(height: 16),
-              const Text(
-                'Who are you?',
-                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 6),
-              const Text('Pick one — you can change later in Settings.'),
-              const SizedBox(height: 18),
+      appBar: AppBar(
+        title: const Text('Who are you? ✨'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          children: [
+            const SizedBox(height: 6),
+            const Text(
+              'Pick your role',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 16),
 
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(_error!, style: const TextStyle(color: Colors.red)),
-                ),
-
-              _RoleButton(
-                title: 'I am a Parent',
-                subtitle: 'Create kids • Make tasks • Track progress',
-                icon: Icons.shield_moon_rounded,
-                onTap: _busy ? null : _chooseParent,
-              ),
-              const SizedBox(height: 12),
-              _RoleButton(
-                title: 'I am a Child',
-                subtitle: 'Join with a code • Do tasks • Earn points',
-                icon: Icons.emoji_events_rounded,
-                onTap: _busy ? null : _chooseChild,
-              ),
-
-              const Spacer(),
-              if (_busy) const CircularProgressIndicator(),
-              const SizedBox(height: 12),
-            ],
-          ),
+            _RoleCard(
+              title: 'Parent / Guardian',
+              subtitle: 'Create kids, add tasks, approve rewards, view chats',
+              emoji: '👨‍👩‍👧‍👦',
+              onTap: () => _setParent(context),
+            ),
+            const SizedBox(height: 12),
+            _RoleCard(
+              title: 'Child',
+              subtitle: 'Join your household with a code and start completing tasks',
+              emoji: '🧸',
+              onTap: () => _setChild(context),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _RoleButton extends StatelessWidget {
+class _RoleCard extends StatelessWidget {
   final String title;
   final String subtitle;
-  final IconData icon;
-  final VoidCallback? onTap;
+  final String emoji;
+  final VoidCallback onTap;
 
-  const _RoleButton({
+  const _RoleCard({
     required this.title,
     required this.subtitle,
-    required this.icon,
+    required this.emoji,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(22),
       onTap: onTap,
+      borderRadius: BorderRadius.circular(26),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
+          color: Colors.white.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(26),
           border: Border.all(color: const Color(0xFFE6E8FF)),
-          boxShadow: const [
-            BoxShadow(blurRadius: 16, color: Color(0x14000000), offset: Offset(0, 10))
-          ],
         ),
         child: Row(
           children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFF2FF),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Icon(icon, size: 28),
-            ),
+            Text(emoji, style: const TextStyle(fontSize: 34)),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 4),
-                  Text(subtitle),
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                  const SizedBox(height: 6),
+                  Text(subtitle, style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black.withOpacity(0.65))),
                 ],
               ),
-            )
+            ),
           ],
         ),
       ),

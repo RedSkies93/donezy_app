@@ -1,599 +1,499 @@
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
-enum AwardsMode { parent, child }
-
-class AwardsPage extends StatelessWidget {
+class AwardsPage extends StatefulWidget {
+  const AwardsPage({super.key});
   static const routeName = '/awards';
 
-  final String parentUid;
-  final String childId;
-  final AwardsMode mode;
+  @override
+  State<AwardsPage> createState() => _AwardsPageState();
+}
 
-  const AwardsPage({
-    super.key,
-    required this.parentUid,
-    required this.childId,
-    this.mode = AwardsMode.parent,
-  });
+class _AwardsPageState extends State<AwardsPage> {
+  late final String parentUid;
+  late final String mode; // parent | child
+  String? childId;
+
+  CollectionReference<Map<String, dynamic>> get _rewards =>
+      FirebaseFirestore.instance
+          .collection('parents')
+          .doc(parentUid)
+          .collection('rewards');
+
+  DocumentReference<Map<String, dynamic>> get _childDoc =>
+      FirebaseFirestore.instance
+          .collection('parents')
+          .doc(parentUid)
+          .collection('children')
+          .doc(childId);
+
+  CollectionReference<Map<String, dynamic>> get _claims =>
+      _childDoc.collection('rewardClaims');
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args =
+        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+    parentUid = (args['parentUid'] ?? '').toString();
+    mode = (args['mode'] ?? 'parent').toString();
+    childId = args['childId']?.toString();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final childRef = FirebaseFirestore.instance
-        .collection('parents')
-        .doc(parentUid)
-        .collection('children')
-        .doc(childId);
-
-    final awardsRef = childRef.collection('awards');
+    final isChild = mode == 'child';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FF),
       appBar: AppBar(
-        title: Text(mode == AwardsMode.parent ? 'Store (Awards)' : 'Awards'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
+        title: Text(isChild ? 'My Rewards 🎁' : 'Rewards 🏆'),
+        centerTitle: true,
+        actions: [
+          if (!isChild)
+            IconButton(
+              icon: const Icon(Icons.add_circle_rounded),
+              onPressed: _openCreateReward,
+            ),
+        ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: childRef.snapshots(),
-          builder: (context, childSnap) {
-            final childData = childSnap.data?.data() ?? {};
-            final childName = (childData['name'] ?? 'Kid').toString();
-            final points = (childData['points'] ?? 0) is int
-                ? (childData['points'] ?? 0) as int
-                : int.tryParse('${childData['points']}') ?? 0;
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _HeaderPill(
-                  title: mode == AwardsMode.parent
-                      ? 'Store for $childName'
-                      : 'Hey $childName!',
-                  subtitle: mode == AwardsMode.parent
-                      ? 'Add prizes, set point costs, and make rewards feel magical ✨'
-                      : 'You have $points points. Scroll and claim what you can!',
-                  points: points,
-                  showPoints: mode == AwardsMode.child,
-                ),
-                const SizedBox(height: 14),
-                Expanded(
-                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: awardsRef
-                        .orderBy('createdAt', descending: true)
-                        .snapshots(),
-                    builder: (context, snap) {
-                      final docs = snap.data?.docs ?? [];
-                      if (docs.isEmpty) {
-                        return Center(
-                          child: Text(
-                            mode == AwardsMode.parent
-                                ? 'No awards yet ✨\nTap + to add one.'
-                                : 'No awards yet ✨',
-                            textAlign: TextAlign.center,
-                          ),
-                        );
-                      }
-
-                      return ListView.separated(
-                        itemCount: docs.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 10),
-                        itemBuilder: (context, i) {
-                          final d = docs[i];
-                          final data = d.data();
-
-                          final title = (data['title'] ?? 'Award').toString();
-                          final note = (data['note'] ?? '').toString();
-                          final cost = (data['cost'] ?? 0) is int
-                              ? (data['cost'] ?? 0) as int
-                              : int.tryParse('${data['cost']}') ?? 0;
-                          final isActive = (data['isActive'] ?? true) as bool;
-                          final redeemedAt = data['redeemedAt'];
-
-                          final isRedeemed = redeemedAt != null;
-
-                          // ✅ Child rule: Claim button is only visible if enough points + active + not redeemed
-                          final canClaim =
-                              !isRedeemed && isActive && points >= cost && cost > 0;
-
-                          // ✅ Child rule: hide inactive awards completely (kid shouldn’t see them)
-                          if (mode == AwardsMode.child && !isActive) {
-                            return const SizedBox.shrink();
-                          }
-
-                          return _AwardCard(
-                            title: title,
-                            note: note,
-                            cost: cost,
-                            isActive: isActive,
-                            isRedeemed: isRedeemed,
-                            mode: mode,
-                            canClaim: canClaim,
-                            onClaim: () => _claimAward(
-                              context,
-                              childRef: childRef,
-                              awardRef: d.reference,
-                              cost: cost,
-                            ),
-                            onEdit: () => _openEditAward(
-                              context,
-                              awardRef: d.reference,
-                              initialTitle: title,
-                              initialNote: note,
-                              initialCost: cost,
-                            ),
-                            onToggleActive: (v) =>
-                                d.reference.update({'isActive': v}),
-                            onDelete: () => _confirmDelete(context,
-                                onDelete: () => d.reference.delete()),
-                          );
-                        },
+      body: Column(
+        children: [
+          if (isChild) _ChildHeader(parentUid: parentUid, childId: childId!),
+          Expanded(
+            child: isChild
+                ? StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                    stream: _childDoc.snapshots(),
+                    builder: (context, childSnap) {
+                      final childData = childSnap.data?.data() ?? {};
+                      final raw = childData['points'] ?? 0;
+                      final childPoints =
+                          raw is int ? raw : int.tryParse('$raw') ?? 0;
+                      return _RewardsList(
+                        parentUid: parentUid,
+                        mode: mode,
+                        childId: childId,
+                        childPoints: childPoints,
+                        rewards: _rewards,
+                        claims: _claims,
+                        openEditReward: _openEditReward,
+                        requestClaim: _requestClaim,
                       );
                     },
+                  )
+                : _RewardsList(
+                    parentUid: parentUid,
+                    mode: mode,
+                    childId: childId,
+                    childPoints: 0,
+                    rewards: _rewards,
+                    claims: _claims,
+                    openEditReward: _openEditReward,
+                    requestClaim: _requestClaim,
                   ),
-                ),
-              ],
-            );
-          },
-        ),
+          ),
+        ],
       ),
-
-      // ✅ Parent-only add button
-      floatingActionButton: mode == AwardsMode.parent
-          ? FloatingActionButton(
-              onPressed: () => _openNewAward(context, awardsRef: awardsRef),
-              child: const Icon(Icons.add),
-            )
-          : null,
     );
   }
 
-  Future<void> _openNewAward(
-    BuildContext context, {
-    required CollectionReference<Map<String, dynamic>> awardsRef,
-  }) async {
+  Future<void> _requestClaim(String rewardId) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _ConfirmDialog(
+        title: 'Request this reward?',
+        message: 'This will ask your parent for approval 🎁',
+        confirmText: 'Request',
+        cancelText: 'Cancel',
+      ),
+    );
+    if (ok != true) return;
+
+    await _claims.add({
+      'rewardId': rewardId,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Requested! 🎁')),
+    );
+  }
+
+  Future<void> _openCreateReward() async {
     final titleCtrl = TextEditingController();
-    final noteCtrl = TextEditingController();
-    final costCtrl = TextEditingController(text: '50');
+    final ptsCtrl = TextEditingController(text: '50');
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => _AwardDialog(
-        title: 'New award',
+      builder: (_) => _RewardDialog(
+        title: 'New Reward ✨',
         titleCtrl: titleCtrl,
-        noteCtrl: noteCtrl,
-        costCtrl: costCtrl,
-        confirmText: 'Save',
-      ),
-    );
-
-    if (ok == true) {
-      final title = titleCtrl.text.trim();
-      final note = noteCtrl.text.trim();
-      final cost = int.tryParse(costCtrl.text.trim()) ?? 0;
-      if (title.isEmpty) return;
-
-      await awardsRef.add({
-        'title': title,
-        'note': note,
-        'cost': cost < 0 ? 0 : cost,
-        'isActive': true,
-        'redeemedAt': null,
-        'redeemedBy': null,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    }
-  }
-
-  Future<void> _openEditAward(
-    BuildContext context, {
-    required DocumentReference<Map<String, dynamic>> awardRef,
-    required String initialTitle,
-    required String initialNote,
-    required int initialCost,
-  }) async {
-    final titleCtrl = TextEditingController(text: initialTitle);
-    final noteCtrl = TextEditingController(text: initialNote);
-    final costCtrl = TextEditingController(text: initialCost.toString());
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => _AwardDialog(
-        title: 'Edit award',
-        titleCtrl: titleCtrl,
-        noteCtrl: noteCtrl,
-        costCtrl: costCtrl,
-        confirmText: 'Update',
-      ),
-    );
-
-    if (ok == true) {
-      final title = titleCtrl.text.trim();
-      final note = noteCtrl.text.trim();
-      final cost = int.tryParse(costCtrl.text.trim()) ?? 0;
-      if (title.isEmpty) return;
-
-      await awardRef.update({
-        'title': title,
-        'note': note,
-        'cost': cost < 0 ? 0 : cost,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    }
-  }
-
-  Future<void> _confirmDelete(
-    BuildContext context, {
-    required Future<void> Function() onDelete,
-  }) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: const Text('Delete award?',
-            style: TextStyle(fontWeight: FontWeight.w900)),
-        content: const Text('This will remove the award from the list.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete')),
-        ],
-      ),
-    );
-    if (ok == true) await onDelete();
-  }
-
-  Future<void> _claimAward(
-    BuildContext context, {
-    required DocumentReference<Map<String, dynamic>> childRef,
-    required DocumentReference<Map<String, dynamic>> awardRef,
-    required int cost,
-  }) async {
-    if (cost <= 0) return;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: const Text('Claim this award?',
-            style: TextStyle(fontWeight: FontWeight.w900)),
-        content: Text('This costs $cost points.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Not yet')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Claim')),
-        ],
+        pointsCtrl: ptsCtrl,
+        enabled: true,
+        confirmText: 'Create',
       ),
     );
 
     if (ok != true) return;
 
-    try {
-      // ✅ Transaction: deduct points + mark award redeemed (safe)
-      await FirebaseFirestore.instance.runTransaction((tx) async {
-        final childSnap = await tx.get(childRef);
-        final awardSnap = await tx.get(awardRef);
+    final title = titleCtrl.text.trim();
+    final points = int.tryParse(ptsCtrl.text.trim()) ?? 0;
+    if (title.isEmpty) return;
 
-        final child = childSnap.data() ?? {};
-        final award = awardSnap.data() ?? {};
+    await _rewards.add({
+      'title': title,
+      'points': points,
+      'enabled': true,
+      'claimedBy': <String>[],
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
 
-        final points = (child['points'] ?? 0) is int
-            ? (child['points'] ?? 0) as int
-            : int.tryParse('${child['points']}') ?? 0;
+  Future<void> _openEditReward(
+      String id, String title, int points, bool enabled) async {
+    final titleCtrl = TextEditingController(text: title);
+    final ptsCtrl = TextEditingController(text: '$points');
 
-        final redeemedAt = award['redeemedAt'];
-        final isActive = (award['isActive'] ?? true) as bool;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => _RewardDialog(
+        title: 'Edit Reward ✨',
+        titleCtrl: titleCtrl,
+        pointsCtrl: ptsCtrl,
+        enabled: enabled,
+        confirmText: 'Save',
+      ),
+    );
 
-        if (!isActive) throw Exception('This award is not available right now.');
-        if (redeemedAt != null) throw Exception('This award was already redeemed.');
-        if (points < cost) throw Exception('Not enough points.');
+    if (ok != true) return;
 
-        tx.update(childRef, {
-          'points': points - cost,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        tx.update(awardRef, {
-          'redeemedAt': FieldValue.serverTimestamp(),
-          'redeemedBy': childRef.id,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      });
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Redeemed! 🎉 Tell your parent to deliver the prize.'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceFirst('Exception: ', '')),
-          ),
-        );
-      }
-    }
+    await _rewards.doc(id).update({
+      'title': titleCtrl.text.trim(),
+      'points': int.tryParse(ptsCtrl.text.trim()) ?? 0,
+      'enabled': enabled,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 }
 
-class _HeaderPill extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final int points;
-  final bool showPoints;
+class _RewardsList extends StatelessWidget {
+  final String parentUid;
+  final String mode; // parent | child
+  final String? childId;
+  final int childPoints;
 
-  const _HeaderPill({
-    required this.title,
-    required this.subtitle,
-    required this.points,
-    required this.showPoints,
+  final CollectionReference<Map<String, dynamic>> rewards;
+  final CollectionReference<Map<String, dynamic>> claims;
+
+  final Future<void> Function(String id, String title, int points, bool enabled)
+      openEditReward;
+  final Future<void> Function(String rewardId) requestClaim;
+
+  const _RewardsList({
+    required this.parentUid,
+    required this.mode,
+    required this.childId,
+    required this.childPoints,
+    required this.rewards,
+    required this.claims,
+    required this.openEditReward,
+    required this.requestClaim,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE6E8FF)),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 14,
-            color: Color(0x12000000),
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 6),
-                Text(subtitle),
-              ],
+    final isChild = mode == 'child';
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: rewards.orderBy('createdAt', descending: false).snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final docs = snap.data!.docs;
+
+        if (docs.isEmpty) {
+          return Center(
+            child: Text(
+              isChild
+                  ? 'No rewards yet ✨'
+                  : 'No rewards yet — tap + to add one ✨',
             ),
-          ),
-          if (showPoints)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          );
+        }
+
+        return ListView.builder(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          itemCount: docs.length,
+          itemBuilder: (context, i) {
+            final d = docs[i];
+            final data = d.data();
+
+            final title = (data['title'] ?? 'Reward').toString();
+            final ptsRaw = data['points'] ?? 0;
+            final points = ptsRaw is int ? ptsRaw : int.tryParse('$ptsRaw') ?? 0;
+
+            final enabled = (data['enabled'] ?? true) as bool;
+            final claimedBy =
+                List<String>.from(data['claimedBy'] ?? const <String>[]);
+
+            final isClaimedForThisChild =
+                isChild ? claimedBy.contains(childId) : false;
+
+            if (isChild && !enabled) {
+              return const SizedBox.shrink();
+            }
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFEFF2FF),
-                borderRadius: BorderRadius.circular(18),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: const Color(0xFFE6E8FF)),
               ),
               child: Column(
                 children: [
-                  const Text('Points',
-                      style:
-                          TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text('$points',
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w900)),
+                  Row(
+                    children: [
+                      const Icon(Icons.emoji_events_rounded,
+                          color: Color(0xFFFFC84A)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w900, fontSize: 15),
+                        ),
+                      ),
+                      _Pill(text: '$points pts'),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (!isChild)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () =>
+                                openEditReward(d.id, title, points, enabled),
+                            child: const Text('Edit ✨'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: SwitchListTile(
+                            value: enabled,
+                            onChanged: (v) => rewards.doc(d.id).update({
+                              'enabled': v,
+                              'updatedAt': FieldValue.serverTimestamp(),
+                            }),
+                            title: const Text('Enabled'),
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ],
+                    )
+                  else ...[
+                    if (isClaimedForThisChild)
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: _Pill(text: 'Claimed ✅'),
+                      )
+                    else
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: (childPoints >= points)
+                              ? () => requestClaim(d.id)
+                              : null,
+                          child: Text(
+                            childPoints >= points
+                                ? 'Request Reward ✨'
+                                : 'Need ${points - childPoints} more pts',
+                          ),
+                        ),
+                      ),
+                  ],
                 ],
               ),
-            ),
-        ],
-      ),
+            );
+          },
+        );
+      },
     );
   }
 }
 
-class _AwardCard extends StatelessWidget {
-  final String title;
-  final String note;
-  final int cost;
-  final bool isActive;
-  final bool isRedeemed;
-  final AwardsMode mode;
-  final bool canClaim;
-
-  final VoidCallback onClaim;
-  final VoidCallback onEdit;
-  final ValueChanged<bool> onToggleActive;
-  final VoidCallback onDelete;
-
-  const _AwardCard({
-    required this.title,
-    required this.note,
-    required this.cost,
-    required this.isActive,
-    required this.isRedeemed,
-    required this.mode,
-    required this.canClaim,
-    required this.onClaim,
-    required this.onEdit,
-    required this.onToggleActive,
-    required this.onDelete,
-  });
+class _ChildHeader extends StatelessWidget {
+  final String parentUid;
+  final String childId;
+  const _ChildHeader({required this.parentUid, required this.childId});
 
   @override
   Widget build(BuildContext context) {
-    final pill = _Pill(
-      text: isRedeemed
-          ? 'Redeemed'
-          : isActive
-              ? 'Available'
-              : 'Hidden',
-      subtle: !isRedeemed && !isActive,
-    );
+    final childDoc = FirebaseFirestore.instance
+        .collection('parents')
+        .doc(parentUid)
+        .collection('children')
+        .doc(childId);
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: const Color(0xFFE6E8FF)),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 12,
-            color: Color(0x12000000),
-            offset: Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(title,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w900)),
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: childDoc.snapshots(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox.shrink();
+        final data = snap.data!.data() ?? {};
+        final name = (data['name'] ?? 'Child').toString();
+        final raw = data['points'] ?? 0;
+        final pts = raw is int ? raw : int.tryParse('$raw') ?? 0;
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFFF0C8), Color(0xFFDEE7FF)],
               ),
-              pill,
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _Pill(text: '$cost pts', subtle: true),
-              const SizedBox(width: 8),
-              if (mode == AwardsMode.parent)
-                Switch(
-                  value: isActive,
-                  onChanged: isRedeemed ? null : onToggleActive,
-                ),
-            ],
-          ),
-          if (note.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(note),
-          ],
-          const SizedBox(height: 10),
-          if (mode == AwardsMode.child)
-            if (canClaim)
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: onClaim,
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18)),
-                  ),
-                  child: const Text('Claim'),
-                ),
-              )
-            else
-              const SizedBox.shrink(),
-          if (mode == AwardsMode.parent)
-            Row(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Row(
               children: [
+                const CircleAvatar(
+                  radius: 22,
+                  backgroundColor: Colors.white,
+                  child: Icon(Icons.card_giftcard_rounded),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_rounded),
-                    label: const Text('Edit'),
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18)),
-                    ),
+                  child: Text(
+                    name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w900, fontSize: 16),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    label: const Text('Delete'),
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18)),
-                    ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Text(
+                    '$pts pts ✨',
+                    style: const TextStyle(fontWeight: FontWeight.w900),
                   ),
                 ),
               ],
             ),
-        ],
-      ),
+          ),
+        );
+      },
     );
   }
 }
 
 class _Pill extends StatelessWidget {
   final String text;
-  final bool subtle;
-  const _Pill({required this.text, this.subtle = false});
+  const _Pill({required this.text});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: subtle ? const Color(0xFFEFF2FF) : const Color(0xFFDEE7FF),
-        borderRadius: BorderRadius.circular(999),
+        color: const Color(0xFFEFF2FF),
+        borderRadius: BorderRadius.circular(16),
       ),
-      child: Text(text, style: const TextStyle(fontWeight: FontWeight.w800)),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+      ),
     );
   }
 }
 
-class _AwardDialog extends StatelessWidget {
+class _RewardDialog extends StatelessWidget {
   final String title;
   final TextEditingController titleCtrl;
-  final TextEditingController noteCtrl;
-  final TextEditingController costCtrl;
+  final TextEditingController pointsCtrl;
+  final bool enabled;
   final String confirmText;
 
-  const _AwardDialog({
+  const _RewardDialog({
     required this.title,
     required this.titleCtrl,
-    required this.noteCtrl,
-    required this.costCtrl,
+    required this.pointsCtrl,
+    required this.enabled,
     required this.confirmText,
   });
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+      title: Text(title),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: titleCtrl,
-            decoration: const InputDecoration(labelText: 'Title'),
+            decoration: const InputDecoration(labelText: 'Reward title'),
           ),
           TextField(
-            controller: noteCtrl,
-            decoration: const InputDecoration(labelText: 'Note (optional)'),
-          ),
-          TextField(
-            controller: costCtrl,
+            controller: pointsCtrl,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Cost (points)'),
+            decoration: const InputDecoration(labelText: 'Points required'),
           ),
         ],
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
         ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(confirmText)),
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(confirmText),
+        ),
+      ],
+    );
+  }
+}
+
+class _ConfirmDialog extends StatelessWidget {
+  final String title;
+  final String message;
+  final String confirmText;
+  final String cancelText;
+
+  const _ConfirmDialog({
+    required this.title,
+    required this.message,
+    required this.confirmText,
+    required this.cancelText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: Text(cancelText),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(confirmText),
+        ),
       ],
     );
   }

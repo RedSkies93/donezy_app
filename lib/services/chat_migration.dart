@@ -1,108 +1,77 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../services/session_store.dart';
+/// One-off migration helpers for chats.
+///
+/// Your app stores chats at:
+/// parents/{parentUid}/chats/{chatId}
+///
+/// This migration backfills a field your rules can use:
+/// - membersAuthUids: [parentUid]
+///
+/// (Kids may not have auth uids in your current schema. If you later add them,
+/// you can extend this to include kid auth uids too.)
+class ChatMigration {
+  ChatMigration._();
 
-class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
-  static const routeName = '/settings';
-
-  Future<void> _logout(BuildContext context) async {
-    await SessionStore.clearAll();
-    await FirebaseAuth.instance.signOut();
-    if (context.mounted) Navigator.of(context).pop();
+  static CollectionReference<Map<String, dynamic>> _chatsCol(String parentUid) {
+    return FirebaseFirestore.instance
+        .collection('parents')
+        .doc(parentUid)
+        .collection('chats');
   }
 
-  Future<void> _resetRole(BuildContext context) async {
-    await SessionStore.clearAll();
-    if (context.mounted) Navigator.of(context).pop();
+  /// Safe to run repeatedly.
+  ///
+  /// Adds/merges:
+  /// - membersAuthUids: [parentUid]
+  /// - updatedAt: server timestamp
+  ///
+  /// Returns number of chat docs updated.
+  static Future<int> backfillMembersAuthUids({required String parentUid}) async {
+    final snap = await _chatsCol(parentUid).get();
+    if (snap.docs.isEmpty) return 0;
+
+    final batch = FirebaseFirestore.instance.batch();
+    int updated = 0;
+
+    for (final d in snap.docs) {
+      final data = d.data();
+
+      // If field exists and already contains parentUid, skip.
+      final existing = (data['membersAuthUids'] as List?)
+              ?.map((e) => e.toString())
+              .toSet() ??
+          <String>{};
+
+      if (existing.contains(parentUid)) continue;
+
+      final next = {...existing, parentUid}.toList();
+
+      batch.set(
+        d.reference,
+        {
+          'membersAuthUids': next,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      updated++;
+    }
+
+    if (updated > 0) {
+      await batch.commit();
+    }
+    return updated;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FF),
-      appBar: AppBar(
-        title: const Text('Settings'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _Tile(
-              title: 'Reset role & session',
-              subtitle: 'Choose Parent/Child again',
-              icon: Icons.restart_alt_rounded,
-              onTap: () => _resetRole(context),
-            ),
-            const SizedBox(height: 10),
-            _Tile(
-              title: 'Log out',
-              subtitle: 'Sign out of this device',
-              icon: Icons.logout_rounded,
-              onTap: () => _logout(context),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+  /// Optional: keep a lightweight initializer if you want to ensure structure.
+  static Future<void> ensureParentChatInitialized(String parentUid) async {
+    final parentDoc =
+        FirebaseFirestore.instance.collection('parents').doc(parentUid);
 
-class _Tile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _Tile({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(22),
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: const Color(0xFFE6E8FF)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFF2FF),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(icon),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 4),
-                  Text(subtitle),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded),
-          ],
-        ),
-      ),
+    await parentDoc.set(
+      {'updatedAt': FieldValue.serverTimestamp()},
+      SetOptions(merge: true),
     );
   }
 }

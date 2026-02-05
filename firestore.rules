@@ -2,22 +2,188 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // -----------------------------
+    // Helpers
+    // -----------------------------
     function signedIn() {
       return request.auth != null;
     }
 
-    function isOwner(uid) {
-      return signedIn() && request.auth.uid == uid;
+    function isParent(parentUid) {
+      return signedIn() && request.auth.uid == parentUid;
     }
 
-    // Donezy: parents/{parentUid}/...
-    match /parents/{parentUid}/{document=**} {
-      allow read, write: if isOwner(parentUid);
+    function childDoc(parentUid, childId) {
+      return get(/databases/$(database)/documents/parents/$(parentUid)/children/$(childId));
     }
 
-    // Default deny everything else
-    match /{document=**} {
-      allow read, write: if false;
+    function isChildOf(parentUid, childId) {
+      return signedIn()
+        && childDoc(parentUid, childId).exists()
+        && childDoc(parentUid, childId).data.childAuthUid == request.auth.uid;
+    }
+
+    // Validate that a child is only updating allowed fields when completing a task
+    function childTaskUpdateIsSafe() {
+      // Only allow status -> "pending" (and timestamps) from child
+      // (You can loosen/tighten this list)
+      return request.resource.data.diff(resource.data).changedKeys()
+        .hasOnly(['status', 'pendingAt', 'updatedAt'])
+        && request.resource.data.status == 'pending';
+    }
+
+    // Validate reward claim creation fields
+    function validClaimCreate() {
+      return request.resource.data.keys().hasOnly(['rewardId', 'status', 'createdAt'])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.rewardId is string;
+    }
+
+    // -----------------------------
+    // Parents root
+    // -----------------------------
+    match /parents/{parentUid} {
+      allow read, write: if isParent(parentUid);
+
+      // -----------------------------
+      // Meta (settings/profile)
+      // parents/{parentUid}/meta/{docId}
+      // -----------------------------
+      match /meta/{docId} {
+        allow read, write: if isParent(parentUid);
+      }
+
+      // -----------------------------
+      // Children
+      // parents/{parentUid}/children/{childId}
+      // -----------------------------
+      match /children/{childId} {
+        // Parent can do everything
+        allow read, write: if isParent(parentUid);
+
+        // Child can read their own profile
+        allow read: if isChildOf(parentUid, childId);
+
+        // Child can update only very specific profile fields if you want.
+        // For now: NO child writes on the profile doc itself.
+        allow update, create, delete: if false;
+
+        // -----------------------------
+        // Tasks (private)
+        // parents/{parentUid}/children/{childId}/tasksPrivate/{taskId}
+        // -----------------------------
+        match /tasksPrivate/{taskId} {
+          // Parent full access
+          allow read, write: if isParent(parentUid);
+
+          // Child can read tasks for self
+          allow read: if isChildOf(parentUid, childId);
+
+          // Child can ONLY mark a task pending (completion request)
+          allow update: if isChildOf(parentUid, childId) && childTaskUpdateIsSafe();
+
+          // Child cannot create/delete tasks
+          allow create, delete: if false;
+        }
+
+        // -----------------------------
+        // Reward claims
+        // parents/{parentUid}/children/{childId}/rewardClaims/{claimId}
+        // -----------------------------
+        match /rewardClaims/{claimId} {
+          // Parent reads/approves/rejects
+          allow read, write: if isParent(parentUid);
+
+          // Child can read their own claims
+          allow read: if isChildOf(parentUid, childId);
+
+          // Child can create a pending claim request only
+          allow create: if isChildOf(parentUid, childId) && validClaimCreate();
+
+          // Child cannot update/delete claims
+          allow update, delete: if false;
+        }
+      }
+
+      // -----------------------------
+      // Rewards (parent-owned list)
+      // parents/{parentUid}/rewards/{rewardId}
+      // -----------------------------
+      match /rewards/{rewardId} {
+        // Parent full access
+        allow read, write: if isParent(parentUid);
+
+        // Children can read rewards (we filter enabled in the UI)
+        // If you want to hide disabled rewards at the rules layer,
+        // we'd need a different structure that keys rewards per-child or uses auth uid lists.
+        allow read: if signedIn();
+      }
+
+      // -----------------------------
+      // Chats
+      // parents/{parentUid}/chats/{chatId}
+      // -----------------------------
+      match /chats/{chatId} {
+
+  // Parent full access
+  allow read, write: if isParent(parentUid);
+
+  // Child can read chat if they are a member
+  allow read: if signedIn()
+    && resource.data.membersAuthUids is list
+    && request.auth.uid in resource.data.membersAuthUids;
+
+  // Child can update ONLY read markers
+  allow update: if signedIn()
+    && request.auth.uid in resource.data.membersAuthUids
+    && request.resource.data.diff(resource.data).changedKeys()
+      .hasOnly(['unreadCounts', 'lastSeenBy', 'updatedAt']);
+
+  // Children cannot create or delete chats
+  allow create, delete: if false;
+
+  // Messages handled in messages subcollection rules
+}
+
+
+        // Messages subcollection
+        match /messages/{msgId} {
+
+  // Parent can do anything
+  allow read, write: if isParent(parentUid);
+
+  // Child can read messages only if they are a member
+  allow read: if signedIn()
+    && request.auth.uid in get(
+      /databases/$(database)/documents/parents/$(parentUid)/chats/$(chatId)
+    ).data.membersAuthUids;
+
+  // Child can SEND messages (senderId must equal their auth uid)
+  allow create: if signedIn()
+    && request.auth.uid in get(
+      /databases/$(database)/documents/parents/$(parentUid)/chats/$(chatId)
+    ).data.membersAuthUids
+    && request.resource.data.keys().hasOnly([
+      'text',
+      'senderId',
+      'createdAt',
+      'seenBy'
+    ])
+    && request.resource.data.text is string
+    && request.resource.data.senderId == request.auth.uid;
+
+  // Child can ONLY update seenBy (👀)
+  allow update: if signedIn()
+    && request.auth.uid in get(
+      /databases/$(database)/documents/parents/$(parentUid)/chats/$(chatId)
+    ).data.membersAuthUids
+    && request.resource.data.diff(resource.data).changedKeys().hasOnly(['seenBy'])
+    && request.resource.data.seenBy is list;
+
+  allow delete: if false;
+}
+
+      }
     }
   }
 }

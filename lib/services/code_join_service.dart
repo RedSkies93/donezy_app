@@ -1,77 +1,53 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class JoinResult {
   final bool success;
   final String message;
   final String? parentUid;
   final String? childId;
+  final String? joinCode;
 
   const JoinResult({
     required this.success,
     required this.message,
     this.parentUid,
     this.childId,
+    this.joinCode,
   });
+
+  static JoinResult ok({required String parentUid, required String childId, required String joinCode}) {
+    return JoinResult(success: true, message: 'OK', parentUid: parentUid, childId: childId, joinCode: joinCode);
+  }
+
+  static JoinResult fail(String message) {
+    return JoinResult(success: false, message: message);
+  }
 }
 
 class CodeJoinService {
-  static Future<JoinResult> joinWithCode(String code) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return const JoinResult(success: false, message: 'Not signed in.');
+  static Future<JoinResult> joinWithCode(String raw) async {
+    final code = raw.trim().toUpperCase();
+    if (code.isEmpty) return JoinResult.fail('Enter a code.');
+
+    final snap = await FirebaseFirestore.instance
+        .collectionGroup('children')
+        .where('joinCode', isEqualTo: code)
+        .limit(1)
+        .get();
+
+    if (snap.docs.isEmpty) {
+      return JoinResult.fail('Code not found.');
     }
 
-    final trimmed = code.trim().toUpperCase();
-    if (trimmed.isEmpty) {
-      return const JoinResult(success: false, message: 'Enter a code.');
+    final doc = snap.docs.first;
+    final childId = doc.id;
+
+    // Path: parents/{parentUid}/children/{childId}
+    final parentUid = doc.reference.parent.parent?.id;
+    if (parentUid == null) {
+      return JoinResult.fail('Invalid code reference.');
     }
 
-    final doc = FirebaseFirestore.instance.collection('codes').doc(trimmed);
-    final snap = await doc.get();
-    if (!snap.exists) {
-      return const JoinResult(success: false, message: 'Code not found.');
-    }
-
-    final data = snap.data()!;
-    final isActive = data['isActive'] == true;
-    final type = (data['type'] ?? '').toString();
-    final parentUid = (data['parentUid'] ?? '').toString();
-    final childId = data['childId']?.toString();
-
-    if (!isActive) {
-      return const JoinResult(success: false, message: 'That code is inactive.');
-    }
-
-    if (type == 'householdShared') {
-      return const JoinResult(
-        success: false,
-        message: 'That is a FAMILY code. Enter your KID-XXXXXX code to join your profile.',
-      );
-    }
-
-    if (type != 'childPrivate' || childId == null || childId.isEmpty) {
-      return const JoinResult(success: false, message: 'Invalid code type.');
-    }
-
-    // Create membership record under parent household
-    final membersRef = FirebaseFirestore.instance
-        .collection('parents')
-        .doc(parentUid)
-        .collection('members')
-        .doc(user.uid);
-
-    await membersRef.set({
-      'role': 'child',
-      'childId': childId,
-      'joinedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    return JoinResult(
-      success: true,
-      message: 'Joined!',
-      parentUid: parentUid,
-      childId: childId,
-    );
+    return JoinResult.ok(parentUid: parentUid, childId: childId, joinCode: code);
   }
 }

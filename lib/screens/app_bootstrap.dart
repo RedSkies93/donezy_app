@@ -20,9 +20,7 @@ class AppBootstrap extends StatelessWidget {
         }
 
         final user = snap.data;
-        if (user == null) {
-          return const LoginPage();
-        }
+        if (user == null) return const LoginPage();
 
         return FutureBuilder<SessionData>(
           future: SessionStore.load(),
@@ -30,19 +28,15 @@ class AppBootstrap extends StatelessWidget {
             if (s.connectionState == ConnectionState.waiting) {
               return const _Splash();
             }
+
             final session = s.data ?? const SessionData();
 
-            // If no role chosen yet, go choose role
-            if (session.role == null) {
-              return const RoleSelectPage();
-            }
+            if (session.role == null) return const RoleSelectPage();
 
-            // Parent route
             if (session.role == SessionRole.parent) {
               return const ParentDashboardPage();
             }
 
-            // Child route (needs parentUid + childId)
             if (session.role == SessionRole.child &&
                 session.parentUid != null &&
                 session.childId != null) {
@@ -52,7 +46,6 @@ class AppBootstrap extends StatelessWidget {
               );
             }
 
-            // Child role but not joined yet -> back to role select (or join flow)
             return const RoleSelectPage();
           },
         );

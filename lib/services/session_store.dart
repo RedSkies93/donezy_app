@@ -7,58 +7,43 @@ class SessionData {
   final String? parentUid;
   final String? childId;
 
-  const SessionData({
-    this.role,
-    this.parentUid,
-    this.childId,
-  });
+  const SessionData({this.role, this.parentUid, this.childId});
 }
 
 class SessionStore {
-  static const _kRole = 'role';
-  static const _kParentUid = 'parentUid';
-  static const _kChildId = 'childId';
+  static const _kRole = 'donezy_role';
+  static const _kParentUid = 'donezy_parentUid';
+  static const _kChildId = 'donezy_childId';
 
   static Future<void> setRole(SessionRole role) async {
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_kRole, role.name);
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString(_kRole, role.name);
   }
 
-  static Future<void> setChildLink({
-    required String parentUid,
-    required String childId,
-  }) async {
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_kParentUid, parentUid);
-    await p.setString(_kChildId, childId);
+  static Future<void> setChildLink({required String parentUid, required String childId}) async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString(_kParentUid, parentUid);
+    await sp.setString(_kChildId, childId);
   }
 
   static Future<SessionData> load() async {
-    final p = await SharedPreferences.getInstance();
-    final roleStr = p.getString(_kRole);
-    final parentUid = p.getString(_kParentUid);
-    final childId = p.getString(_kChildId);
-
+    final sp = await SharedPreferences.getInstance();
+    final roleStr = sp.getString(_kRole);
     SessionRole? role;
-    if (roleStr != null) {
-      role = SessionRole.values.where((e) => e.name == roleStr).firstOrNull;
-    }
+    if (roleStr == 'parent') role = SessionRole.parent;
+    if (roleStr == 'child') role = SessionRole.child;
 
     return SessionData(
       role: role,
-      parentUid: parentUid,
-      childId: childId,
+      parentUid: sp.getString(_kParentUid),
+      childId: sp.getString(_kChildId),
     );
   }
 
-  static Future<void> clearAll() async {
-    final p = await SharedPreferences.getInstance();
-    await p.remove(_kRole);
-    await p.remove(_kParentUid);
-    await p.remove(_kChildId);
+  static Future<void> clear() async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.remove(_kRole);
+    await sp.remove(_kParentUid);
+    await sp.remove(_kChildId);
   }
-}
-
-extension _FirstOrNull<E> on Iterable<E> {
-  E? get firstOrNull => isEmpty ? null : first;
 }

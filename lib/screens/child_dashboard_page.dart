@@ -21,6 +21,37 @@ class ChildDashboardPage extends StatefulWidget {
 class _ChildDashboardPageState extends State<ChildDashboardPage> {
   int _tab = 0; // 0 private, 1 shared
 
+  void _openMessages() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        settings: RouteSettings(
+          name: MessagePage.routeName,
+          arguments: {
+            'parentUid': widget.parentUid,
+            'mode': 'child',
+            'childId': widget.childId,
+          },
+        ),
+        builder: (_) => const MessagePage(),
+      ),
+    );
+  }
+
+  void _openAwards() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        settings: RouteSettings(
+          name: AwardsPage.routeName,
+          arguments: {
+            'parentUid': widget.parentUid,
+            'childId': widget.childId,
+          },
+        ),
+        builder: (_) => const AwardsPage(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final parentRef =
@@ -39,7 +70,6 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
                   title: 'Donezy',
                   onBack: () => Navigator.of(context).maybePop(),
                 ),
-
                 StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                   stream: childRef.snapshots(),
                   builder: (context, snap) {
@@ -56,7 +86,6 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
                     );
                   },
                 ),
-
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
                   child: _CuteCard(
@@ -81,7 +110,6 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
                     ),
                   ),
                 ),
-
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
@@ -99,19 +127,8 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
         ),
       ),
       bottomNavigationBar: _BottomNav(
-        onMessages: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => MessagePage(parentUid: widget.parentUid),
-          ),
-        ),
-        onAwards: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => AwardsPage(
-              parentUid: widget.parentUid,
-              childId: widget.childId,
-            ),
-          ),
-        ),
+        onMessages: _openMessages,
+        onAwards: _openAwards,
       ),
     );
   }
@@ -120,7 +137,6 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
 // =======================================================
 // PRIVATE TASKS (Child) — ONLY ACTIVE + shows Important + icon/image + due date
 // =======================================================
-
 class _ChildPrivateTasks extends StatelessWidget {
   final String parentUid;
   final String childId;
@@ -137,7 +153,6 @@ class _ChildPrivateTasks extends StatelessWidget {
         .collection('tasksPrivate');
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      // ✅ Only show tasks enabled for the child
       stream: ref
           .where('isActive', isEqualTo: true)
           .orderBy('createdAt', descending: true)
@@ -146,7 +161,8 @@ class _ChildPrivateTasks extends StatelessWidget {
         final docs = snap.data?.docs ?? [];
         if (docs.isEmpty) {
           return const _EmptyState(
-              text: 'No tasks yet.\nAsk your parent to add some ✨');
+            text: 'No tasks yet.\nAsk your parent to add some ✨',
+          );
         }
 
         return ListView.separated(
@@ -159,7 +175,6 @@ class _ChildPrivateTasks extends StatelessWidget {
             final title = (data['title'] ?? '').toString();
             final pts = (data['points'] ?? 0) as num;
             final status = (data['status'] ?? 'open').toString();
-
             final isImportant = (data['isImportant'] ?? false) as bool;
             final iconKey = data['iconKey'] as String?;
             final imageUrl = data['imageUrl'] as String?;
@@ -189,11 +204,11 @@ class _ChildPrivateTasks extends StatelessWidget {
 }
 
 // =======================================================
-// SHARED TASKS (Child) — ONLY ACTIVE + icon/image + due date + Important badge if present
+// SHARED TASKS (Child)
 // =======================================================
-
 class _ChildSharedTasks extends StatelessWidget {
   final String parentUid;
+
   const _ChildSharedTasks({required this.parentUid});
 
   @override
@@ -204,17 +219,15 @@ class _ChildSharedTasks extends StatelessWidget {
         .collection('tasksShared');
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      // ✅ Only show enabled tasks (if you add isActive there too)
       stream: ref.orderBy('createdAt', descending: true).snapshots(),
       builder: (context, snap) {
         final allDocs = snap.data?.docs ?? [];
 
-        // If your shared tasks also use isActive, filter them safely:
         final docs = allDocs.where((d) {
           final data = d.data();
           final v = data['isActive'];
           if (v is bool) return v == true;
-          return true; // fallback if field not added yet
+          return true;
         }).toList();
 
         if (docs.isEmpty) {
@@ -230,8 +243,6 @@ class _ChildSharedTasks extends StatelessWidget {
 
             final title = (data['title'] ?? '').toString();
             final pts = (data['points'] ?? 0) as num;
-
-            // Optional fields if you add them later
             final isImportant = (data['isImportant'] ?? false) as bool;
             final iconKey = data['iconKey'] as String?;
             final imageUrl = data['imageUrl'] as String?;
@@ -256,9 +267,8 @@ class _ChildSharedTasks extends StatelessWidget {
 }
 
 // =======================================================
-// Cute Task Tile (Child UI) — matches your new style
+// Cute Task Tile
 // =======================================================
-
 class _CuteTaskTile extends StatelessWidget {
   const _CuteTaskTile({
     required this.title,
@@ -274,13 +284,10 @@ class _CuteTaskTile extends StatelessWidget {
   final String title;
   final int points;
   final String? status;
-
   final bool isImportant;
   final DateTime? dueDate;
-
   final String? iconKey;
   final String? imageUrl;
-
   final Widget? trailing;
 
   @override
@@ -290,79 +297,70 @@ class _CuteTaskTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.95),
+        color: Colors.white.withOpacity(0.95),
         borderRadius: BorderRadius.circular(26),
         border: Border.all(color: const Color(0xFFE9D7D3)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withOpacity(0.04),
             blurRadius: 14,
             offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              _TaskVisual(
-                icon: icon,
-                imageUrl: imageUrl,
-              ),
-              const SizedBox(width: 12),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          _TaskVisual(icon: icon, imageUrl: imageUrl),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 17,
-                              color: Color(0xFF2C2C2C),
-                            ),
-                          ),
-                        ),
-                        if (isImportant) ...[
-                          const SizedBox(width: 8),
-                          _ImportantBadge(),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _DueDatePill(dueDate: dueDate),
-                        const SizedBox(width: 10),
-                        _PointsPill(points: points),
-                      ],
-                    ),
-                    if (status != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Status: $status',
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF6E6E6E),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 17,
+                          color: Color(0xFF2C2C2C),
                         ),
                       ),
+                    ),
+                    if (isImportant) ...[
+                      const SizedBox(width: 8),
+                      _ImportantBadge(),
                     ],
                   ],
                 ),
-              ),
-
-              if (trailing != null) ...[
-                const SizedBox(width: 10),
-                trailing!,
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _DueDatePill(dueDate: dueDate),
+                    const SizedBox(width: 10),
+                    _PointsPill(points: points),
+                  ],
+                ),
+                if (status != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Status: $status',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF6E6E6E),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
+          if (trailing != null) ...[
+            const SizedBox(width: 10),
+            trailing!,
+          ],
         ],
       ),
     );
@@ -405,6 +403,7 @@ class _TaskVisual extends StatelessWidget {
 
 class _DueDatePill extends StatelessWidget {
   const _DueDatePill({required this.dueDate});
+
   final DateTime? dueDate;
 
   @override
@@ -501,12 +500,9 @@ class _ImportantBadge extends StatelessWidget {
   }
 }
 
-// =======================================================
-// Status setter (private tasks only)
-// =======================================================
-
 class _StatusSetter extends StatelessWidget {
   const _StatusSetter({required this.onSetStatus});
+
   final void Function(String newStatus) onSetStatus;
 
   @override
@@ -534,10 +530,6 @@ class _StatusSetter extends StatelessWidget {
     );
   }
 }
-
-// =======================================================
-// Bottom nav
-// =======================================================
 
 class _BottomNav extends StatelessWidget {
   final VoidCallback onMessages;
@@ -580,7 +572,7 @@ class _BottomNav extends StatelessWidget {
                   ),
                   side: const BorderSide(color: Color(0xFFE9D7D3)),
                   minimumSize: const Size.fromHeight(50),
-                  backgroundColor: Colors.white.withValues(alpha: 0.9),
+                  backgroundColor: Colors.white.withOpacity(0.9),
                 ),
               ),
             ),
@@ -590,10 +582,6 @@ class _BottomNav extends StatelessWidget {
     );
   }
 }
-
-// =======================================================
-// Top bar + header card + shared UI
-// =======================================================
 
 class _ChildTopBar extends StatelessWidget {
   const _ChildTopBar({required this.title, required this.onBack});
@@ -618,7 +606,7 @@ class _ChildTopBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          const SizedBox(width: 54), // keep title centered
+          const SizedBox(width: 54),
         ],
       ),
     );
@@ -698,10 +686,7 @@ class _TabPill extends StatelessWidget {
           ),
         ),
         child: Center(
-          child: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w900),
-          ),
+          child: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
         ),
       ),
     );
@@ -710,6 +695,7 @@ class _TabPill extends StatelessWidget {
 
 class _CuteCard extends StatelessWidget {
   final Widget child;
+
   const _CuteCard({required this.child});
 
   @override
@@ -717,14 +703,14 @@ class _CuteCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.9),
+        color: Colors.white.withOpacity(0.9),
         borderRadius: BorderRadius.circular(26),
         border: Border.all(color: const Color(0xFFE9D7D3)),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
             blurRadius: 16,
-            color: const Color(0x14000000),
-            offset: const Offset(0, 10),
+            color: Color(0x14000000),
+            offset: Offset(0, 10),
           ),
         ],
       ),
@@ -735,13 +721,14 @@ class _CuteCard extends StatelessWidget {
 
 class _RoundIconButton extends StatelessWidget {
   const _RoundIconButton({required this.icon, required this.onTap});
+
   final IconData icon;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.75),
+      color: Colors.white.withOpacity(0.75),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
         side: const BorderSide(color: Color(0xFFE9D7D3)),
@@ -761,6 +748,7 @@ class _RoundIconButton extends StatelessWidget {
 
 class _EmptyState extends StatelessWidget {
   final String text;
+
   const _EmptyState({required this.text});
 
   @override
@@ -778,10 +766,6 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-// =======================================================
-// Cute background
-// =======================================================
-
 class _CuteBokehBackground extends StatelessWidget {
   const _CuteBokehBackground();
 
@@ -796,8 +780,8 @@ class _CuteBokehBackground extends StatelessWidget {
             end: Alignment.bottomCenter,
           ),
         ),
-        child: Stack(
-          children: const [
+        child: const Stack(
+          children: [
             _BokehDot(top: 90, left: 40, size: 170, color: Color(0x33FFC6B8)),
             _BokehDot(top: 180, right: 20, size: 210, color: Color(0x26FFD7A6)),
             _BokehDot(bottom: 180, left: 10, size: 220, color: Color(0x1ED3F2FF)),
@@ -836,18 +820,11 @@ class _BokehDot extends StatelessWidget {
       child: Container(
         width: size,
         height: size,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-        ),
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       ),
     );
   }
 }
-
-// =======================================================
-// Icon set (same idea as Parent page) — 20+
-// =======================================================
 
 class DonezyTaskIcons {
   static const Map<String, IconData> _map = {

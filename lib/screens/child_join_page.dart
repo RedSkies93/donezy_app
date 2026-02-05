@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import '../services/session_store.dart';
 import '../services/code_join_service.dart';
 import 'child_dashboard_page.dart';
@@ -8,7 +11,7 @@ class ChildJoinPage extends StatefulWidget {
   static const routeName = '/child-join';
 
   @override
-  State<ChildJoinPage> createState() => _ChildJoinPageState();
+  State createState() => _ChildJoinPageState();
 }
 
 class _ChildJoinPageState extends State<ChildJoinPage> {
@@ -16,7 +19,7 @@ class _ChildJoinPageState extends State<ChildJoinPage> {
   bool _busy = false;
   String? _error;
 
-  Future<void> _join() async {
+  Future _join() async {
     setState(() {
       _busy = true;
       _error = null;
@@ -24,10 +27,29 @@ class _ChildJoinPageState extends State<ChildJoinPage> {
 
     try {
       final result = await CodeJoinService.joinWithCode(_codeCtrl.text);
+
       if (!result.success) {
         setState(() => _error = result.message);
         return;
       }
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() => _error = 'Not signed in.');
+        return;
+      }
+
+      // ✅ REQUIRED FOR RULES: bind this child profile to this auth user
+      await FirebaseFirestore.instance
+          .collection('parents')
+          .doc(result.parentUid!)
+          .collection('children')
+          .doc(result.childId!)
+          .set({
+        'childAuthUid': user.uid,
+        'joinCode': result.joinCode,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
 
       await SessionStore.setChildLink(
         parentUid: result.parentUid!,
@@ -35,6 +57,7 @@ class _ChildJoinPageState extends State<ChildJoinPage> {
       );
 
       if (!mounted) return;
+
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => ChildDashboardPage(
@@ -78,7 +101,6 @@ class _ChildJoinPageState extends State<ChildJoinPage> {
             const SizedBox(height: 6),
             const Text('Ask your parent for your KID-XXXXXX code.'),
             const SizedBox(height: 16),
-
             TextField(
               controller: _codeCtrl,
               textCapitalization: TextCapitalization.characters,
@@ -91,13 +113,11 @@ class _ChildJoinPageState extends State<ChildJoinPage> {
               ),
             ),
             const SizedBox(height: 12),
-
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Text(_error!, style: const TextStyle(color: Colors.red)),
               ),
-
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -112,7 +132,7 @@ class _ChildJoinPageState extends State<ChildJoinPage> {
                         height: 22,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Join'),
+                    : const Text('Join ✨'),
               ),
             ),
           ],
