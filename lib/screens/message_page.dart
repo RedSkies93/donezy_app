@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../services/chat_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class MessagePage extends StatefulWidget {
   const MessagePage({super.key});
@@ -30,8 +30,8 @@ class _MessagePageState extends State<MessagePage> {
     super.didChangeDependencies();
     final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
     parentUid = args['parentUid'];
-    mode = args['mode'] ?? 'parent';
-    childId = args['childId'];
+    mode = (args['mode'] ?? 'parent').toString();
+    childId = args['childId']?.toString();
   }
 
   bool _visibleToMe(Map<String, dynamic> chat) {
@@ -53,34 +53,41 @@ class _MessagePageState extends State<MessagePage> {
         kids: kids,
         onCreateFamily: () async {
           final allIds = kids.map((e) => e.id).toList();
-          final ref = await ChatService().createOrGetChat(
+
+          // ✅ FIX: static call
+          final ref = await ChatService.createOrGetChat(
             parentUid: parentUid,
             type: 'family',
             memberChildIds: allIds,
             title: 'Family Chat 💖',
           );
+
           if (!mounted) return;
           Navigator.pop(context);
           _openThread(chatId: ref.id, title: 'Family Chat 💖');
         },
         onCreateParentChild: (kidId, kidName) async {
-          final ref = await ChatService().createOrGetChat(
+          // ✅ FIX: static call
+          final ref = await ChatService.createOrGetChat(
             parentUid: parentUid,
             type: 'parent_child',
             memberChildIds: [kidId],
             title: 'Parent + $kidName ✨',
           );
+
           if (!mounted) return;
           Navigator.pop(context);
           _openThread(chatId: ref.id, title: 'Parent + $kidName ✨');
         },
         onCreateKids: (kidAId, kidAName, kidBId, kidBName) async {
-          final ref = await ChatService().createOrGetChat(
+          // ✅ FIX: static call
+          final ref = await ChatService.createOrGetChat(
             parentUid: parentUid,
             type: 'kids',
             memberChildIds: [kidAId, kidBId],
             title: '$kidAName + $kidBName 🧸',
           );
+
           if (!mounted) return;
           Navigator.pop(context);
           _openThread(chatId: ref.id, title: '$kidAName + $kidBName 🧸');
@@ -400,10 +407,9 @@ class _ChatThreadPageState extends State<_ChatThreadPage> {
   final _ctrl = TextEditingController();
 
   String get myId {
-  if (widget.mode == 'parent') return 'parent';
-  return FirebaseAuth.instance.currentUser!.uid;
-}
-
+    if (widget.mode == 'parent') return 'parent';
+    return FirebaseAuth.instance.currentUser!.uid;
+  }
 
   DocumentReference<Map<String, dynamic>> get _chatDoc =>
       FirebaseFirestore.instance.collection('parents').doc(widget.parentUid).collection('chats').doc(widget.chatId);
@@ -489,7 +495,6 @@ class _ChatThreadPageState extends State<_ChatThreadPage> {
         children: [
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-
               stream: _msgs.orderBy('createdAt').snapshots(),
               builder: (context, snap) {
                 if (!snap.hasData) return const Center(child: CircularProgressIndicator());
@@ -598,4 +603,3 @@ class _EmptyState extends StatelessWidget {
     );
   }
 }
-

@@ -1,57 +1,41 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// Minimal Firestore-backed chat service.
-///
-/// Data model (defaults):
-/// - `chats/{chatId}`: { parentUid, childUid, createdAt, updatedAt }
-/// - `chats/{chatId}/messages/{messageId}`: { text, senderUid, createdAt }
 class ChatService {
-  final FirebaseFirestore _firestore;
+  static final _db = FirebaseFirestore.instance;
 
-  ChatService({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
-
-  /// Creates (if needed) and returns a stable chat id for a parent/child pair.
-  ///
-  /// This matches the common UI usage:
-  /// `final chatId = await ChatService().createOrGetChat(parentUid: ..., childUid: ...);`
-  Future<String> createOrGetChat({
+  /// Creates or returns a chat doc for a parent + a set of children.
+  /// This matches your MessagePage calls: type, memberChildIds, title.
+  static Future<DocumentReference<Map<String, dynamic>>> createOrGetChat({
     required String parentUid,
-    required String childUid,
+    required String type, // 'family' | 'parent_child' | 'kids'
+    required List<String> memberChildIds,
+    required String title,
   }) async {
-    final chatId = _stableChatId(parentUid: parentUid, childUid: childUid);
-    final ref = _firestore.collection('chats').doc(chatId);
+    final chats = _db.collection('parents').doc(parentUid).collection('chats');
 
-    await _firestore.runTransaction((tx) async {
-      final snap = await tx.get(ref);
-      if (snap.exists) {
-        tx.update(ref, {'updatedAt': FieldValue.serverTimestamp()});
-        return;
-      }
+    // Deterministic key to avoid duplicates:
+    final sortedKids = [...memberChildIds]..sort();
+    final key = '$type:${sortedKids.join(",")}';
+    final chatId = key.replaceAll(RegExp(r'[^a-zA-Z0-9:_,-]'), '_');
 
-      tx.set(ref, {
-        'parentUid': parentUid,
-        'childUid': childUid,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+    final ref = chats.doc(chatId);
+    final snap = await ref.get();
+    if (snap.exists) return ref;
+
+    await ref.set({
+      'type': type,
+      'title': title,
+      'membersChildIds': sortedKids,
+      // For rules/migration compatibility:
+      'membersAuthUids': <String>[parentUid, ...sortedKids],
+      'lastMessage': '',
+      'lastSenderId': '',
+      'lastSeenBy': <String>[],
+      'unreadCounts': <String, dynamic>{},
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    return chatId;
-  }
-
-  DocumentReference<Map<String, dynamic>> chatRef(String chatId) =>
-      _firestore.collection('chats').doc(chatId);
-
-  CollectionReference<Map<String, dynamic>> messagesRef(String chatId) =>
-      chatRef(chatId).collection('messages');
-
-  static String _stableChatId({
-    required String parentUid,
-    required String childUid,
-  }) {
-    // Keep doc ids short and deterministic. Using a fixed order (parent, child)
-    // avoids accidentally creating two chats for the same pair.
-    return '${parentUid}_$childUid';
+    return ref;
   }
 }

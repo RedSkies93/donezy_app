@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../widgets/global_reward_inbox.dart';
+
 import 'login_page.dart';
 import 'settings_page.dart';
 import 'message_page.dart';
