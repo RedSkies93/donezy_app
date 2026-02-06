@@ -5,15 +5,18 @@ import 'child_store.dart';
 import 'mock_data/mock_tasks.dart';
 
 class TaskService {
-final TaskStore store;
+  final TaskStore store;
   final ChildStore childStore;
 
   TaskService(this.store, this.childStore);
 
   Future<void> load() async {
-WidgetsBinding.instance.addPostFrameCallback((_) {
+    final _sw = Stopwatch()..start();
+    print('TaskService.load START');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       store.setTasks(MockTasks.seed());
-});
+      print('TaskService.load DONE in ms');
+    });
   }
 
   Future<void> toggleStar(String taskId) async {
@@ -107,9 +110,6 @@ WidgetsBinding.instance.addPostFrameCallback((_) {
     store.setTasks(reOrdered);
   }
 }
-
-
-
 
 
 

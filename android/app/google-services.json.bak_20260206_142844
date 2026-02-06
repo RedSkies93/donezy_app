@@ -7,42 +7,6 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1048144802705:android:75cb99fdb4ff3831332030",
-        "android_client_info": {
-          "package_name": "com.donezy.app"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "1048144802705-jrd003pg16jmrbhb88uke0pprq8uhbn1.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyA_TStZR_jnbdWvPU1nyGizWO4KN6JIdQs"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "1048144802705-jrd003pg16jmrbhb88uke0pprq8uhbn1.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "1048144802705-gngc19ui0slsrmjd0eqphe53a6r25goc.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.example.donzeyApp"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
         "mobilesdk_app_id": "1:1048144802705:android:6b13e2a431e7b376332030",
         "android_client_info": {
           "package_name": "com.example.donzey_app"

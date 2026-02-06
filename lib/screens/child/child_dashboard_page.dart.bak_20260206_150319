@@ -43,10 +43,7 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
     if (_loaded) return;
     _loaded = true;
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // ignore: discarded_futures
-      context.read<TaskService>().load();
-    });
+    context.read<TaskService>().load();
   }
 
   @override
@@ -173,6 +170,5 @@ onToggleStar: null, // child: hidden
     );
   }
 }
-
 
 

@@ -13,7 +13,8 @@ final TaskStore store;
   Future<void> load() async {
 WidgetsBinding.instance.addPostFrameCallback((_) {
       store.setTasks(MockTasks.seed());
-});
+      print('TaskService.load DONE in ' + _sw.elapsedMilliseconds.toString() + 'ms');
+    });
   }
 
   Future<void> toggleStar(String taskId) async {
@@ -107,7 +108,6 @@ WidgetsBinding.instance.addPostFrameCallback((_) {
     store.setTasks(reOrdered);
   }
 }
-
 
 
 

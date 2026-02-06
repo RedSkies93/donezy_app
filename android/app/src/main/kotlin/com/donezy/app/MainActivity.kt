@@ -1,4 +1,4 @@
-package com.example.donzey_app
+package com.donezy.app
 
 import io.flutter.embedding.android.FlutterActivity
 
