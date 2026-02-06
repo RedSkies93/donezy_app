@@ -99,7 +99,14 @@ class TaskStore extends ChangeNotifier {
 
   bool isSelected(String taskId) => _selectedIds.contains(taskId);
 
-  void toggleSelected(String taskId) {
+    void selectAll(Iterable<String> ids) {
+    var changed = false;
+    for (final id in ids) {
+      if (_selectedIds.add(id)) changed = true;
+    }
+    if (changed) notifyListeners();
+  }
+void toggleSelected(String taskId) {
     if (_selectedIds.contains(taskId)) {
       _selectedIds.remove(taskId);
     } else {
@@ -113,3 +120,4 @@ class TaskStore extends ChangeNotifier {
     notifyListeners();
   }
 }
+

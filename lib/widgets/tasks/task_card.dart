@@ -116,7 +116,7 @@ class TaskCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
         onTap: onEdit,
-        onLongPress: (dragHandle != null) ? null : onLongPress,
+        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: Column(
@@ -129,8 +129,16 @@ class TaskCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Far-left drag handle (dashboard passes ReorderableDragStartListener)
-        if (dragHandle != null) dragHandle!,
-        if (dragHandle != null) const SizedBox(width: 8),
+        if (dragHandle != null)
+  Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(999),
+      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+    ),
+    child: dragHandle!,
+  ),
+        if (dragHandle != null) const SizedBox(width: 12),
 
         // Centered title (not cut off)
         Expanded(
@@ -264,6 +272,9 @@ const SizedBox(height: 10),
     );
   }
 }
+
+
+
 
 
 

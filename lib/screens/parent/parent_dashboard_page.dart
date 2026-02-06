@@ -23,7 +23,7 @@ import '../../actions/tasks/toggle_star_action.dart';
 import '../../actions/tasks/toggle_done_action.dart';
 import '../../actions/tasks/toggle_bulk_mode_action.dart';
 import '../../actions/tasks/confirm_bulk_delete_action.dart';
-import '../../actions/tasks/pick_due_date_action.dart';
+import '../../actions/tasks/pick_due_date_action.dart'; import '../../actions/tasks/reorder_tasks_action.dart';
 
 import '../../actions/navigation/go_to_dashboard_action.dart';
 import '../../actions/navigation/go_to_messages_action.dart';
@@ -71,11 +71,7 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
     final canReorder = taskStore.filter == TaskFilterMode.all && !taskStore.bulkMode;
 
     void selectAllVisible() {
-      for (final t in visible) {
-        if (!taskStore.isSelected(t.id)) {
-          taskStore.toggleSelected(t.id);
-        }
-      }
+      taskStore.selectAll(visible.map((t) => t.id));
     }
 
     return AppShell(
@@ -164,7 +160,7 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
                 buildDefaultDragHandles: false,
                 onReorder: (oldIndex, newIndex) {
                   if (!canReorder) return;
-                  service.reorder(oldIndex, newIndex);
+                  ReorderTasksAction().run(service: service, oldIndex: oldIndex, newIndex: newIndex, canReorder: canReorder);
                 },
                 itemCount: visible.length,
                 itemBuilder: (context, index) {
@@ -215,5 +211,8 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
     );
   }
 }
+
+
+
 
 

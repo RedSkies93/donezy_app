@@ -85,7 +85,13 @@ class TaskService {
 
   Future<void> reorder(int oldIndex, int newIndex) async {
     final list = store.tasks.toList();
+    if (oldIndex < 0 || oldIndex >= list.length) return;
+
     if (newIndex > oldIndex) newIndex -= 1;
+
+    // Clamp to valid insertion range
+    if (newIndex < 0) newIndex = 0;
+    if (newIndex > list.length - 1) newIndex = list.length - 1;
 
     final item = list.removeAt(oldIndex);
     list.insert(newIndex, item);
@@ -98,3 +104,4 @@ class TaskService {
     store.setTasks(reOrdered);
   }
 }
+

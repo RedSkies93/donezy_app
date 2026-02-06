@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/pastel_card.dart';
 import '../../widgets/screen_background.dart';
+import '../../widgets/bubble_button.dart';
 import '../../widgets/points_pill.dart';
 import '../../widgets/tasks/task_card.dart';
+import '../../widgets/tasks/bulk_action_bar.dart';
 import '../../widgets/tasks/task_filter_row.dart';
 
 import '../../core/asset_registry.dart';
@@ -15,7 +17,10 @@ import '../../services/task_service.dart';
 import '../../services/task_store.dart';
 import '../../services/child_store.dart';
 
+import '../../actions/tasks/add_task_action.dart';
 import '../../actions/tasks/toggle_done_action.dart';
+import '../../actions/tasks/toggle_bulk_mode_action.dart';
+import '../../actions/tasks/confirm_bulk_delete_action.dart';
 
 import '../../actions/navigation/go_to_child_dashboard_action.dart';
 import '../../actions/navigation/go_to_messages_action.dart';
@@ -47,12 +52,19 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
     final points = context.watch<ChildStore>().points;
     final service = context.read<TaskService>();
     final toggleDone = ToggleDoneAction();
+    final toggleBulk = ToggleBulkModeAction();
+    final confirmBulkDelete = ConfirmBulkDeleteAction();
     final goChildDash = GoToChildDashboardAction();
     final goMsg = GoToMessagesAction();
     final goAwards = GoToAwardsAction();
     final goSettings = GoToSettingsAction();
 
     final visible = taskStore.visibleTasks;
+    void selectAllVisible() {
+      for (final t in visible) {
+        if (!taskStore.isSelected(t.id)) {
+          taskStore.toggleSelected(t.id);
+        }
       }
     }
 
@@ -100,16 +112,28 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
             ),
             const SizedBox(height: AppSpacing.cardGap),
 
-            const SizedBox.shrink(), // child: read-only (Add Task removed)
-child: const Text('Add Task'),
+            BubbleButton(
+              onPressed: () => AddTaskAction().run(context: context, service: service),
+              child: const Text('Add Task'),
             ),
             const SizedBox(height: 10),
-            const SizedBox.shrink(), // child: read-only (Bulk Mode removed)
-),
+            BubbleButton(
+              onPressed: () => toggleBulk.run(store: taskStore),
+              child: Text(taskStore.bulkMode ? 'Exit Bulk Mode' : 'Bulk Mode'),
+            ),
             const SizedBox(height: AppSpacing.cardGap),
 
-            const SizedBox.shrink(), // child: read-only (BulkActionBar removed)
-),
+            if (taskStore.bulkMode)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: BulkActionBar(
+                  selectedCount: taskStore.selectedCount,
+                  onSelectAllVisible: selectAllVisible,
+                  onClear: taskStore.clearSelection,
+                  onCancel: () => taskStore.setBulkMode(false),
+                  onDelete: () => confirmBulkDelete.run(context: context, service: service, store: taskStore),
+                ),
+              ),
 
             if (visible.isEmpty)
               const PastelCard(child: Text('No tasks match this filter yet.'))
@@ -126,13 +150,16 @@ child: const Text('Add Task'),
                     padding: const EdgeInsets.only(bottom: 10),
                     child: TaskCard(
                       task: t,
-                      isSelected: false, // child: read-only
-                      dragHandle: null,
-                      onToggleStar: null, // child: hidden
+                      isSelected: taskStore.isSelected(t.id),
+                                            dragHandle: null,
+onToggleStar: null, // child: hidden
+
                       onToggleDone: () => toggleDone.run(service: service, taskId: t.id),
                       onPickDueDate: null, // child: hidden
                       onEdit: null, // child: hidden
+                      
                       onLongPress: null, // child: hidden
+                      
                     ),
                   );
                 },
