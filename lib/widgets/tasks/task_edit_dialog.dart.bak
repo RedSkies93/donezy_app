@@ -1,0 +1,194 @@
+import 'package:flutter/material.dart';
+
+import '../../models/task_model.dart';
+import '../ruled_paper_dialog.dart';
+import '../bubble_button.dart';
+
+class TaskEditResult {
+  final String title;
+  final int pointsValue;
+  final DateTime? dueDate;
+  final bool clearDueDate;
+
+  const TaskEditResult({
+    required this.title,
+    required this.pointsValue,
+    required this.dueDate,
+    required this.clearDueDate,
+  });
+}
+
+class TaskEditDialog extends StatefulWidget {
+  final TaskModel task;
+
+  const TaskEditDialog({super.key, required this.task});
+
+  static Future<TaskEditResult?> show(BuildContext context, TaskModel task) {
+    return showDialog<TaskEditResult>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => TaskEditDialog(task: task),
+    );
+  }
+
+  @override
+  State<TaskEditDialog> createState() => _TaskEditDialogState();
+}
+
+class _TaskEditDialogState extends State<TaskEditDialog> {
+  late final TextEditingController _title;
+  late int _points;
+  DateTime? _dueDate;
+  bool _clearDue = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _title = TextEditingController(text: widget.task.title);
+    _points = widget.task.pointsValue;
+    _dueDate = widget.task.dueDate;
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    super.dispose();
+  }
+
+  String _mmdd(DateTime d) {
+    final mm = d.month.toString().padLeft(2, '0');
+    final dd = d.day.toString().padLeft(2, '0');
+    return '$mm/$dd';
+  }
+
+  Future<void> _pickDueDate() async {
+    final now = DateTime.now();
+    final initial = _dueDate ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(initial.year, initial.month, initial.day),
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 5),
+    );
+    if (picked == null) return;
+    setState(() {
+      _dueDate = DateTime(picked.year, picked.month, picked.day);
+      _clearDue = false;
+    });
+  }
+
+  void _clearDueDate() {
+    setState(() {
+      _dueDate = null;
+      _clearDue = true;
+    });
+  }
+
+  void _save() {
+    final title = _title.text.trim();
+    if (title.isEmpty) return;
+
+    Navigator.of(context).pop(
+      TaskEditResult(
+        title: title,
+        pointsValue: _points,
+        dueDate: _dueDate,
+        clearDueDate: _clearDue,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RuledPaperDialog(
+      title: 'Edit Task ✏️',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _title,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'Task name',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (_) => _save(),
+          ),
+          const SizedBox(height: 14),
+
+          // Points row
+          Row(
+            children: [
+              const Text('Points', style: TextStyle(fontWeight: FontWeight.w900)),
+              const Spacer(),
+              IconButton(
+                onPressed: () => setState(() => _points = (_points - 5).clamp(0, 999)),
+                icon: const Icon(Icons.remove_circle_outline_rounded),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(width: 1),
+                ),
+                child: Text('$_points', style: const TextStyle(fontWeight: FontWeight.w900)),
+              ),
+              IconButton(
+                onPressed: () => setState(() => _points = (_points + 5).clamp(0, 999)),
+                icon: const Icon(Icons.add_circle_outline_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Due date row
+          Row(
+            children: [
+              const Text('Due date', style: TextStyle(fontWeight: FontWeight.w900)),
+              const Spacer(),
+              if (_dueDate != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(width: 1),
+                  ),
+                  child: Text('Due ${_mmdd(_dueDate!)}'),
+                ),
+              const SizedBox(width: 10),
+              TextButton(
+                onPressed: _pickDueDate,
+                child: const Text('Pick'),
+              ),
+              TextButton(
+                onPressed: _clearDueDate,
+                child: const Text('Clear'),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Actions
+          Row(
+            children: [
+              Expanded(
+                child: BubbleButton(
+                  onPressed: () => Navigator.of(context).pop(null),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: BubbleButton(
+                  onPressed: _save,
+                  child: const Text('Save'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -1,0 +1,1113 @@
+### DONEZY TASK/REORDER BUNDLE ###
+Generated: 2026-02-06 08:30:01
+Branch: main
+Commit: 838cb68d9fd6efdfe3b3d10aab10f667946eb5c4
+
+
+===== FILE: lib\widgets\tasks\task_card.dart =====
+import 'package:flutter/material.dart';
+
+import '../../models/task_model.dart';
+import '../pastel_card.dart';
+
+class TaskCard extends StatelessWidget {
+  final TaskModel task;
+  final bool isSelected;
+
+  /// Optional drag handle widget (dashboards pass ReorderableDragStartListener)
+  final Widget? dragHandle;
+
+  final VoidCallback onToggleStar;
+  final VoidCallback onToggleDone;
+  final VoidCallback onPickDueDate;
+  final VoidCallback onEdit;
+  final VoidCallback onLongPress;
+
+  const TaskCard({
+    super.key,
+    required this.task,
+    required this.isSelected,
+    required this.dragHandle,
+    required this.onToggleStar,
+    required this.onToggleDone,
+    required this.onPickDueDate,
+    required this.onEdit,
+    required this.onLongPress,
+  });
+
+  DateTime _todayStart() {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  bool get _isOverdue {
+    if (task.isDone) return false;
+    final d = task.dueDate;
+    if (d == null) return false;
+    return d.isBefore(_todayStart());
+  }
+
+  String _mmdd(DateTime d) {
+    final mm = d.month.toString().padLeft(2, '0');
+    final dd = d.day.toString().padLeft(2, '0');
+    return '$mm/$dd';
+  }
+
+  Widget _pill(
+    BuildContext context, {
+    required String label,
+    required bool strong,
+    required IconData icon,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+
+    final bg = strong
+        ? cs.primary.withValues(alpha: 0.18)
+        : cs.secondary.withValues(alpha: 0.14);
+
+    final border = strong
+        ? cs.primary.withValues(alpha: 0.35)
+        : cs.secondary.withValues(alpha: 0.30);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: border, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tapIcon({
+    required BuildContext context,
+    required IconData icon,
+    required VoidCallback onTap,
+    required String tooltip,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+        child: IconButton(
+          onPressed: onTap,
+          icon: Icon(icon),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    final due = task.dueDate;
+
+    final pointsLabel = '${task.pointsValue} pts';
+    final dueLabel = (due == null)
+        ? 'No due'
+        : (_isOverdue ? 'OVERDUE' : 'Due ${_mmdd(due)}');
+
+    return PastelCard(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onEdit,
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  if (dragHandle != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.30),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.drag_indicator_rounded, size: 18),
+                          const SizedBox(width: 4),
+                          dragHandle!,
+                        ],
+                      ),
+                    ),
+                  if (dragHandle != null) const SizedBox(width: 6),
+
+                  Expanded(
+                    child: Text(
+                      task.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            decoration: task.isDone
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                    ),
+                  ),
+
+                  _tapIcon(
+                    context: context,
+                    icon: Icons.edit_rounded,
+                    onTap: onEdit,
+                    tooltip: 'Edit',
+                  ),
+
+                  _tapIcon(
+                    context: context,
+                    icon: task.isStarred
+                        ? Icons.star_rounded
+                        : Icons.star_border_rounded,
+                    onTap: onToggleStar,
+                    tooltip: 'Star',
+                  ),
+
+                  _tapIcon(
+                    context: context,
+                    icon: task.isDone
+                        ? Icons.check_circle_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                    onTap: onToggleDone,
+                    tooltip: 'Done',
+                  ),
+
+                  _tapIcon(
+                    context: context,
+                    icon: Icons.calendar_month_rounded,
+                    onTap: onPickDueDate,
+                    tooltip: 'Due date',
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 10),
+
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                children: [
+                  _pill(
+                    context,
+                    label: pointsLabel,
+                    strong: false,
+                    icon: Icons.bolt_rounded,
+                  ),
+                  _pill(
+                    context,
+                    label: dueLabel,
+                    strong: _isOverdue,
+                    icon: (due == null)
+                        ? Icons.event_busy_rounded
+                        : (_isOverdue
+                            ? Icons.warning_rounded
+                            : Icons.schedule_rounded),
+                  ),
+                  if (isSelected)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cs.tertiary.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: cs.tertiary.withValues(alpha: 0.30),
+                          width: 1,
+                        ),
+                      ),
+                      child: const Text(
+                        'SELECTED',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+
+
+
+
+
+
+
+===== FILE: lib\screens\parent\parent_dashboard_page.dart =====
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../widgets/app_shell.dart';
+import '../../widgets/pastel_card.dart';
+import '../../widgets/screen_background.dart';
+import '../../widgets/bubble_button.dart';
+import '../../widgets/points_pill.dart';
+import '../../widgets/tasks/task_card.dart';
+import '../../widgets/tasks/bulk_action_bar.dart';
+import '../../widgets/tasks/task_filter_row.dart';
+
+import '../../core/asset_registry.dart';
+import '../../core/constants.dart';
+
+import '../../services/task_service.dart';
+import '../../services/task_store.dart';
+import '../../services/child_store.dart';
+
+import '../../actions/tasks/add_task_action.dart';
+import '../../actions/tasks/edit_task_action.dart';
+import '../../actions/tasks/toggle_star_action.dart';
+import '../../actions/tasks/toggle_done_action.dart';
+import '../../actions/tasks/toggle_bulk_mode_action.dart';
+import '../../actions/tasks/confirm_bulk_delete_action.dart';
+import '../../actions/tasks/pick_due_date_action.dart';
+
+import '../../actions/navigation/go_to_dashboard_action.dart';
+import '../../actions/navigation/go_to_messages_action.dart';
+import '../../actions/navigation/go_to_awards_action.dart';
+import '../../actions/navigation/go_to_settings_action.dart';
+
+class ParentDashboardPage extends StatefulWidget {
+  const ParentDashboardPage({super.key});
+
+  @override
+  State<ParentDashboardPage> createState() => _ParentDashboardPageState();
+}
+
+class _ParentDashboardPageState extends State<ParentDashboardPage> {
+  bool _loaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_loaded) return;
+    _loaded = true;
+
+    context.read<TaskService>().load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final taskStore = context.watch<TaskStore>();
+    final points = context.watch<ChildStore>().points;
+    final service = context.read<TaskService>();
+
+    final toggleStar = ToggleStarAction();
+    final toggleDone = ToggleDoneAction();
+    final toggleBulk = ToggleBulkModeAction();
+    final confirmBulkDelete = ConfirmBulkDeleteAction();
+    final pickDue = PickDueDateAction();
+
+    final goDash = GoToDashboardAction();
+    final goMsg = GoToMessagesAction();
+    final goAwards = GoToAwardsAction();
+    final goSettings = GoToSettingsAction();
+
+    final visible = taskStore.visibleTasks;
+
+    final canReorder = taskStore.filter == TaskFilterMode.all && !taskStore.bulkMode;
+
+    void selectAllVisible() {
+      for (final t in visible) {
+        if (!taskStore.isSelected(t.id)) {
+          taskStore.toggleSelected(t.id);
+        }
+      }
+    }
+
+    return AppShell(
+      title: 'Parent Dashboard',
+      currentIndex: 0,
+      onNavTap: (i) {
+        switch (i) {
+          case 0:
+            goDash.run(context);
+            break;
+          case 1:
+            goMsg.run(context);
+            break;
+          case 2:
+            goAwards.run(context);
+            break;
+          case 3:
+            goSettings.run(context);
+            break;
+        }
+      },
+      body: ScreenBackground(
+        assetPath: AssetRegistry.bgParent,
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.page),
+          children: [
+            PastelCard(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Today’s Tasks ✅',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(taskStore.bulkMode ? 'Bulk mode: long-press to select.' : 'Use the grip to reorder.'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  PointsPill(points: points),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.cardGap),
+
+            TaskFilterRow(
+              selectedIndex: taskStore.filter.index,
+              onSelect: (i) => taskStore.setFilter(TaskFilterMode.values[i]),
+            ),
+            const SizedBox(height: AppSpacing.cardGap),
+
+            BubbleButton(
+              onPressed: () => AddTaskAction().run(context: context, service: service),
+              child: const Text('Add Task'),
+            ),
+            const SizedBox(height: 10),
+            BubbleButton(
+              onPressed: () => toggleBulk.run(store: taskStore),
+              child: Text(taskStore.bulkMode ? 'Exit Bulk Mode' : 'Bulk Mode'),
+            ),
+            const SizedBox(height: AppSpacing.cardGap),
+
+            if (taskStore.bulkMode)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: BulkActionBar(
+                  selectedCount: taskStore.selectedCount,
+                  onSelectAllVisible: selectAllVisible,
+                  onClear: taskStore.clearSelection,
+                  onCancel: () => taskStore.setBulkMode(false),
+                  onDelete: () => confirmBulkDelete.run(context: context, service: service, store: taskStore),
+                ),
+              ),
+
+            if (visible.isEmpty)
+              const PastelCard(child: Text('No tasks match this filter yet.'))
+            else
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                buildDefaultDragHandles: false,
+                onReorder: (oldIndex, newIndex) {
+                  if (!canReorder) return;
+                  service.reorder(oldIndex, newIndex);
+                },
+                itemCount: visible.length,
+                itemBuilder: (context, index) {
+                  final t = visible[index];
+
+                  return Padding(
+                    key: ValueKey('task_${t.id}'),
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: TaskCard(
+                      task: t,
+                      isSelected: taskStore.isSelected(t.id),
+                      dragHandle: canReorder
+                          ? ReorderableDragStartListener(
+                              index: index,
+                              child: const Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Icon(Icons.drag_handle_rounded),
+                              ),
+                            )
+                          : const Padding(
+                              padding: EdgeInsets.all(6),
+                              child: Icon(Icons.drag_handle_rounded, color: Colors.grey),
+                            ),
+                      onToggleStar: () => toggleStar.run(service: service, taskId: t.id),
+                      onToggleDone: () => toggleDone.run(service: service, taskId: t.id),
+                      onPickDueDate: () => pickDue.run(context: context, service: service, task: t),
+                      onEdit: () {
+                        if (taskStore.bulkMode) {
+                          taskStore.toggleSelected(t.id);
+                        } else {
+                          EditTaskAction().run(context: context, service: service, task: t);
+                        }
+                      },
+                      onLongPress: () {
+                        if (!taskStore.bulkMode) taskStore.setBulkMode(true);
+                        taskStore.toggleSelected(t.id);
+                      },
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+
+
+
+===== FILE: lib\screens\child\child_dashboard_page.dart =====
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../widgets/app_shell.dart';
+import '../../widgets/pastel_card.dart';
+import '../../widgets/screen_background.dart';
+import '../../widgets/bubble_button.dart';
+import '../../widgets/points_pill.dart';
+import '../../widgets/tasks/task_card.dart';
+import '../../widgets/tasks/bulk_action_bar.dart';
+import '../../widgets/tasks/task_filter_row.dart';
+
+import '../../core/asset_registry.dart';
+import '../../core/constants.dart';
+
+import '../../services/task_service.dart';
+import '../../services/task_store.dart';
+import '../../services/child_store.dart';
+
+import '../../actions/tasks/add_task_action.dart';
+import '../../actions/tasks/edit_task_action.dart';
+import '../../actions/tasks/toggle_star_action.dart';
+import '../../actions/tasks/toggle_done_action.dart';
+import '../../actions/tasks/toggle_bulk_mode_action.dart';
+import '../../actions/tasks/confirm_bulk_delete_action.dart';
+import '../../actions/tasks/pick_due_date_action.dart';
+
+import '../../actions/navigation/go_to_child_dashboard_action.dart';
+import '../../actions/navigation/go_to_messages_action.dart';
+import '../../actions/navigation/go_to_awards_action.dart';
+import '../../actions/navigation/go_to_settings_action.dart';
+
+class ChildDashboardPage extends StatefulWidget {
+  const ChildDashboardPage({super.key});
+
+  @override
+  State<ChildDashboardPage> createState() => _ChildDashboardPageState();
+}
+
+class _ChildDashboardPageState extends State<ChildDashboardPage> {
+  bool _loaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_loaded) return;
+    _loaded = true;
+
+    context.read<TaskService>().load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final taskStore = context.watch<TaskStore>();
+    final points = context.watch<ChildStore>().points;
+    final service = context.read<TaskService>();
+
+    final toggleStar = ToggleStarAction();
+    final toggleDone = ToggleDoneAction();
+    final toggleBulk = ToggleBulkModeAction();
+    final confirmBulkDelete = ConfirmBulkDeleteAction();
+    final pickDue = PickDueDateAction();
+
+    final goChildDash = GoToChildDashboardAction();
+    final goMsg = GoToMessagesAction();
+    final goAwards = GoToAwardsAction();
+    final goSettings = GoToSettingsAction();
+
+    final visible = taskStore.visibleTasks;
+    final canReorder = taskStore.filter == TaskFilterMode.all && !taskStore.bulkMode;
+
+    void selectAllVisible() {
+      for (final t in visible) {
+        if (!taskStore.isSelected(t.id)) {
+          taskStore.toggleSelected(t.id);
+        }
+      }
+    }
+
+    return AppShell(
+      title: 'Child Dashboard',
+      currentIndex: 0,
+      onNavTap: (i) {
+        switch (i) {
+          case 0:
+            goChildDash.run(context);
+            break;
+          case 1:
+            goMsg.run(context);
+            break;
+          case 2:
+            goAwards.run(context);
+            break;
+          case 3:
+            goSettings.run(context);
+            break;
+        }
+      },
+      body: ScreenBackground(
+        assetPath: AssetRegistry.bgChild,
+        child: ListView(
+          padding: const EdgeInsets.all(AppSpacing.page),
+          children: [
+            PastelCard(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Hey Superstar ⭐',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                  ),
+                  PointsPill(points: points),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.cardGap),
+
+            TaskFilterRow(
+              selectedIndex: taskStore.filter.index,
+              onSelect: (i) => taskStore.setFilter(TaskFilterMode.values[i]),
+            ),
+            const SizedBox(height: AppSpacing.cardGap),
+
+            BubbleButton(
+              onPressed: () => AddTaskAction().run(context: context, service: service),
+              child: const Text('Add Task'),
+            ),
+            const SizedBox(height: 10),
+            BubbleButton(
+              onPressed: () => toggleBulk.run(store: taskStore),
+              child: Text(taskStore.bulkMode ? 'Exit Bulk Mode' : 'Bulk Mode'),
+            ),
+            const SizedBox(height: AppSpacing.cardGap),
+
+            if (taskStore.bulkMode)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: BulkActionBar(
+                  selectedCount: taskStore.selectedCount,
+                  onSelectAllVisible: selectAllVisible,
+                  onClear: taskStore.clearSelection,
+                  onCancel: () => taskStore.setBulkMode(false),
+                  onDelete: () => confirmBulkDelete.run(context: context, service: service, store: taskStore),
+                ),
+              ),
+
+            if (visible.isEmpty)
+              const PastelCard(child: Text('No tasks match this filter yet.'))
+            else
+              ReorderableListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                buildDefaultDragHandles: false,
+                onReorder: (oldIndex, newIndex) {
+                  if (!canReorder) return;
+                  service.reorder(oldIndex, newIndex);
+                },
+                itemCount: visible.length,
+                itemBuilder: (context, index) {
+                  final t = visible[index];
+
+                  return Padding(
+                    key: ValueKey('task_${t.id}'),
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: TaskCard(
+                      task: t,
+                      isSelected: taskStore.isSelected(t.id),
+                      dragHandle: canReorder
+                          ? ReorderableDragStartListener(
+                              index: index,
+                              child: const Padding(
+                                padding: EdgeInsets.all(6),
+                                child: Icon(Icons.drag_handle_rounded),
+                              ),
+                            )
+                          : const Padding(
+                              padding: EdgeInsets.all(6),
+                              child: Icon(Icons.drag_handle_rounded, color: Colors.grey),
+                            ),
+                      onToggleStar: () => toggleStar.run(service: service, taskId: t.id),
+                      onToggleDone: () => toggleDone.run(service: service, taskId: t.id),
+                      onPickDueDate: () => pickDue.run(context: context, service: service, task: t),
+                      onEdit: () {
+                        if (taskStore.bulkMode) {
+                          taskStore.toggleSelected(t.id);
+                        } else {
+                          EditTaskAction().run(context: context, service: service, task: t);
+                        }
+                      },
+                      onLongPress: () {
+                        if (!taskStore.bulkMode) taskStore.setBulkMode(true);
+                        taskStore.toggleSelected(t.id);
+                      },
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+
+
+
+===== FILE: lib\actions\tasks\reorder_tasks_action.dart =====
+import '../../core/action_result.dart';
+
+class ReorderTasks {
+  Future<ActionResult<void>> run() async {
+    // Phase 1: placeholder
+    return const ActionResult.success();
+  }
+}
+
+
+
+===== FILE: lib\services\task_store.dart =====
+import 'package:flutter/foundation.dart';
+import '../models/task_model.dart';
+
+enum TaskFilterMode {
+  all,
+  starred,
+  dueSoon,
+  overdue,
+}
+
+class TaskStore extends ChangeNotifier {
+  List<TaskModel> _tasks = const [];
+
+  // Bulk mode state
+  bool _bulkMode = false;
+  final Set<String> _selectedIds = <String>{};
+
+  // Filter state
+  TaskFilterMode _filter = TaskFilterMode.all;
+
+  List<TaskModel> get tasks => _tasks;
+  bool get bulkMode => _bulkMode;
+
+  Set<String> get selectedIds => _selectedIds;
+  int get selectedCount => _selectedIds.length;
+
+  TaskFilterMode get filter => _filter;
+
+  DateTime _todayStart() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  List<TaskModel> get visibleTasks {
+    final base = _tasks;
+
+    switch (_filter) {
+      case TaskFilterMode.all:
+        return base;
+
+      case TaskFilterMode.starred:
+        return base.where((t) => t.isStarred).toList(growable: false);
+
+      case TaskFilterMode.dueSoon:
+        final start = _todayStart();
+        final end = start.add(const Duration(days: 3));
+        return base
+            .where((t) => t.dueDate != null)
+            .where((t) => !t.isDone)
+            .where((t) => t.dueDate!.isAfter(start.subtract(const Duration(seconds: 1))))
+            .where((t) => t.dueDate!.isBefore(end.add(const Duration(days: 1))))
+            .toList(growable: false);
+
+      case TaskFilterMode.overdue:
+        final start = _todayStart();
+        return base
+            .where((t) => t.dueDate != null)
+            .where((t) => !t.isDone)
+            .where((t) => t.dueDate!.isBefore(start))
+            .toList(growable: false);
+    }
+  }
+
+  void setTasks(List<TaskModel> items) {
+    final sorted = items.toList()..sort((a, b) => a.order.compareTo(b.order));
+    _tasks = List.unmodifiable(sorted);
+
+    final existing = _tasks.map((t) => t.id).toSet();
+    _selectedIds.removeWhere((id) => !existing.contains(id));
+
+    notifyListeners();
+  }
+
+  void updateTask(TaskModel updated) {
+    final idx = _tasks.indexWhere((t) => t.id == updated.id);
+    if (idx < 0) return;
+
+    final next = _tasks.toList();
+    next[idx] = updated;
+    next.sort((a, b) => a.order.compareTo(b.order));
+    _tasks = List.unmodifiable(next);
+    notifyListeners();
+  }
+
+  // Filter controls
+  void setFilter(TaskFilterMode mode) {
+    _filter = mode;
+    notifyListeners();
+  }
+
+  // Bulk mode controls
+  void setBulkMode(bool value) {
+    _bulkMode = value;
+    if (!value) _selectedIds.clear();
+    notifyListeners();
+  }
+
+  void toggleBulkMode() => setBulkMode(!_bulkMode);
+
+  bool isSelected(String taskId) => _selectedIds.contains(taskId);
+
+  void toggleSelected(String taskId) {
+    if (_selectedIds.contains(taskId)) {
+      _selectedIds.remove(taskId);
+    } else {
+      _selectedIds.add(taskId);
+    }
+    notifyListeners();
+  }
+
+  void clearSelection() {
+    _selectedIds.clear();
+    notifyListeners();
+  }
+}
+
+
+
+===== FILE: lib\services\task_service.dart =====
+import '../models/task_model.dart';
+import 'task_store.dart';
+import 'child_store.dart';
+import 'mock_data/mock_tasks.dart';
+
+class TaskService {
+  final TaskStore store;
+  final ChildStore childStore;
+
+  TaskService(this.store, this.childStore);
+
+  Future<void> load() async {
+    store.setTasks(MockTasks.seed());
+  }
+
+  Future<void> toggleStar(String taskId) async {
+    final t = store.tasks.firstWhere((x) => x.id == taskId);
+    store.updateTask(t.copyWith(isStarred: !t.isStarred));
+  }
+
+  Future<void> addTask(String title) async {
+    final clean = title.trim();
+    if (clean.isEmpty) return;
+
+    final id = 't_${DateTime.now().microsecondsSinceEpoch}';
+    final maxOrder = store.tasks.isEmpty
+        ? -1
+        : store.tasks.map((t) => t.order).reduce((a, b) => a > b ? a : b);
+
+    final created = TaskModel(
+      id: id,
+      title: clean,
+      isStarred: false,
+      isEnabled: true,
+      isDone: false,
+      pointsValue: 10,
+      order: maxOrder + 1,
+      dueDate: null,
+    );
+
+    store.setTasks([...store.tasks, created]);
+  }
+
+  Future<void> renameTask(String taskId, String newTitle) async {
+    final clean = newTitle.trim();
+    if (clean.isEmpty) return;
+
+    final t = store.tasks.firstWhere((x) => x.id == taskId);
+    store.updateTask(t.copyWith(title: clean));
+  }
+
+  Future<void> setPointsValue(String taskId, int pointsValue) async {
+    final t = store.tasks.firstWhere((x) => x.id == taskId);
+    final safe = pointsValue.clamp(0, 999);
+    store.updateTask(t.copyWith(pointsValue: safe));
+  }
+
+  Future<void> setDueDate(String taskId, DateTime? dueDate) async {
+    final t = store.tasks.firstWhere((x) => x.id == taskId);
+    final dateOnly = dueDate == null ? null : DateTime(dueDate.year, dueDate.month, dueDate.day);
+    store.updateTask(t.copyWith(dueDate: dateOnly));
+  }
+
+  Future<void> deleteTask(String taskId) async {
+    store.setTasks(store.tasks.where((t) => t.id != taskId).toList());
+  }
+
+  Future<void> deleteMany(Set<String> ids) async {
+    if (ids.isEmpty) return;
+    store.setTasks(store.tasks.where((t) => !ids.contains(t.id)).toList());
+  }
+
+  Future<void> toggleDone(String taskId) async {
+    final t = store.tasks.firstWhere((x) => x.id == taskId);
+    final nextDone = !t.isDone;
+
+    if (nextDone) {
+      childStore.earn(t.pointsValue);
+    } else {
+      childStore.spend(t.pointsValue);
+    }
+
+    store.updateTask(t.copyWith(isDone: nextDone));
+  }
+
+  Future<void> reorder(int oldIndex, int newIndex) async {
+    final list = store.tasks.toList();
+    if (newIndex > oldIndex) newIndex -= 1;
+
+    final item = list.removeAt(oldIndex);
+    list.insert(newIndex, item);
+
+    final reOrdered = <TaskModel>[];
+    for (var i = 0; i < list.length; i++) {
+      reOrdered.add(list[i].copyWith(order: i));
+    }
+
+    store.setTasks(reOrdered);
+  }
+}
+
+
+
+===== FILE: lib\widgets\tasks\task_filter_row.dart =====
+import 'package:flutter/material.dart';
+
+class TaskFilterRow extends StatelessWidget {
+  final int selectedIndex; // 0=all, 1=starred, 2=dueSoon, 3=overdue
+  final ValueChanged<int> onSelect;
+
+  const TaskFilterRow({
+    super.key,
+    required this.selectedIndex,
+    required this.onSelect,
+  });
+
+  Widget _pill(String label, bool active, VoidCallback onTap) {
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(width: 1),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                decoration: active ? TextDecoration.underline : null,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            _pill('All', selectedIndex == 0, () => onSelect(0)),
+            const SizedBox(width: 10),
+            _pill('Starred', selectedIndex == 1, () => onSelect(1)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            _pill('Due Soon', selectedIndex == 2, () => onSelect(2)),
+            const SizedBox(width: 10),
+            _pill('Overdue', selectedIndex == 3, () => onSelect(3)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+
+
+===== FILE: lib\widgets\tasks\child_selector_row.dart =====
+import 'package:flutter/material.dart';
+
+class ChildSelectorRow extends StatelessWidget {
+  const ChildSelectorRow({super.key});
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+
+
+===== FILE: lib\widgets\tasks\bulk_action_bar.dart =====
+import 'package:flutter/material.dart';
+
+class BulkActionBar extends StatelessWidget {
+  final int selectedCount;
+
+  final VoidCallback onSelectAllVisible;
+  final VoidCallback onClear;
+
+  final VoidCallback onCancel;
+  final VoidCallback onDelete;
+
+  const BulkActionBar({
+    super.key,
+    required this.selectedCount,
+    required this.onSelectAllVisible,
+    required this.onClear,
+    required this.onCancel,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    Widget pillButton({
+      required VoidCallback onPressed,
+      required String label,
+    }) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: TextButton(
+          onPressed: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Text(label),
+          ),
+        ),
+      );
+    }
+
+    Widget primaryPill({
+      required VoidCallback onPressed,
+      required String label,
+    }) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: ElevatedButton(
+          onPressed: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Text(label),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // LEFT: Selected count (fixed width)
+          SizedBox(
+            width: 74,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'SELECTED',
+                  style: textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  selectedCount.toString(),
+                  style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 10),
+
+          // RIGHT: Actions that WRAP to avoid overflow
+          Expanded(
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              alignment: WrapAlignment.start,
+              children: [
+                pillButton(onPressed: onSelectAllVisible, label: 'Select All'),
+                pillButton(onPressed: onClear, label: 'Clear'),
+                pillButton(onPressed: onCancel, label: 'Exit'),
+                primaryPill(onPressed: onDelete, label: 'Delete'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
