@@ -4,10 +4,8 @@ import 'package:provider/provider.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/pastel_card.dart';
 import '../../widgets/screen_background.dart';
-import '../../widgets/bubble_button.dart';
 import '../../widgets/points_pill.dart';
 import '../../widgets/tasks/task_card.dart';
-import '../../widgets/tasks/bulk_action_bar.dart';
 import '../../widgets/tasks/task_filter_row.dart';
 
 import '../../core/asset_registry.dart';
@@ -17,13 +15,7 @@ import '../../services/task_service.dart';
 import '../../services/task_store.dart';
 import '../../services/child_store.dart';
 
-import '../../actions/tasks/add_task_action.dart';
-import '../../actions/tasks/edit_task_action.dart';
-import '../../actions/tasks/toggle_star_action.dart';
 import '../../actions/tasks/toggle_done_action.dart';
-import '../../actions/tasks/toggle_bulk_mode_action.dart';
-import '../../actions/tasks/confirm_bulk_delete_action.dart';
-import '../../actions/tasks/pick_due_date_action.dart';
 
 import '../../actions/navigation/go_to_child_dashboard_action.dart';
 import '../../actions/navigation/go_to_messages_action.dart';
@@ -54,26 +46,13 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
     final taskStore = context.watch<TaskStore>();
     final points = context.watch<ChildStore>().points;
     final service = context.read<TaskService>();
-
-    final toggleStar = ToggleStarAction();
     final toggleDone = ToggleDoneAction();
-    final toggleBulk = ToggleBulkModeAction();
-    final confirmBulkDelete = ConfirmBulkDeleteAction();
-    final pickDue = PickDueDateAction();
-
     final goChildDash = GoToChildDashboardAction();
     final goMsg = GoToMessagesAction();
     final goAwards = GoToAwardsAction();
     final goSettings = GoToSettingsAction();
 
     final visible = taskStore.visibleTasks;
-    final canReorder = taskStore.filter == TaskFilterMode.all && !taskStore.bulkMode;
-
-    void selectAllVisible() {
-      for (final t in visible) {
-        if (!taskStore.isSelected(t.id)) {
-          taskStore.toggleSelected(t.id);
-        }
       }
     }
 
@@ -121,40 +100,23 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
             ),
             const SizedBox(height: AppSpacing.cardGap),
 
-            BubbleButton(
-              onPressed: () => AddTaskAction().run(context: context, service: service),
-              child: const Text('Add Task'),
+            const SizedBox.shrink(), // child: read-only (Add Task removed)
+child: const Text('Add Task'),
             ),
             const SizedBox(height: 10),
-            BubbleButton(
-              onPressed: () => toggleBulk.run(store: taskStore),
-              child: Text(taskStore.bulkMode ? 'Exit Bulk Mode' : 'Bulk Mode'),
-            ),
+            const SizedBox.shrink(), // child: read-only (Bulk Mode removed)
+),
             const SizedBox(height: AppSpacing.cardGap),
 
-            if (taskStore.bulkMode)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: BulkActionBar(
-                  selectedCount: taskStore.selectedCount,
-                  onSelectAllVisible: selectAllVisible,
-                  onClear: taskStore.clearSelection,
-                  onCancel: () => taskStore.setBulkMode(false),
-                  onDelete: () => confirmBulkDelete.run(context: context, service: service, store: taskStore),
-                ),
-              ),
+            const SizedBox.shrink(), // child: read-only (BulkActionBar removed)
+),
 
             if (visible.isEmpty)
               const PastelCard(child: Text('No tasks match this filter yet.'))
             else
-              ReorderableListView.builder(
+              ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                buildDefaultDragHandles: false,
-                onReorder: (oldIndex, newIndex) {
-                  if (!canReorder) return;
-                  service.reorder(oldIndex, newIndex);
-                },
                 itemCount: visible.length,
                 itemBuilder: (context, index) {
                   final t = visible[index];
@@ -164,33 +126,13 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
                     padding: const EdgeInsets.only(bottom: 10),
                     child: TaskCard(
                       task: t,
-                      isSelected: taskStore.isSelected(t.id),
-                      dragHandle: canReorder
-                          ? ReorderableDragStartListener(
-                              index: index,
-                              child: const Padding(
-                                padding: EdgeInsets.all(6),
-                                child: Icon(Icons.drag_handle_rounded),
-                              ),
-                            )
-                          : const Padding(
-                              padding: EdgeInsets.all(6),
-                              child: Icon(Icons.drag_handle_rounded, color: Colors.grey),
-                            ),
-                      onToggleStar: () => toggleStar.run(service: service, taskId: t.id),
+                      isSelected: false, // child: read-only
+                      dragHandle: null,
+                      onToggleStar: null, // child: hidden
                       onToggleDone: () => toggleDone.run(service: service, taskId: t.id),
-                      onPickDueDate: () => pickDue.run(context: context, service: service, task: t),
-                      onEdit: () {
-                        if (taskStore.bulkMode) {
-                          taskStore.toggleSelected(t.id);
-                        } else {
-                          EditTaskAction().run(context: context, service: service, task: t);
-                        }
-                      },
-                      onLongPress: () {
-                        if (!taskStore.bulkMode) taskStore.setBulkMode(true);
-                        taskStore.toggleSelected(t.id);
-                      },
+                      onPickDueDate: null, // child: hidden
+                      onEdit: null, // child: hidden
+                      onLongPress: null, // child: hidden
                     ),
                   );
                 },

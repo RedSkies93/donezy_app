@@ -10,22 +10,22 @@ class TaskCard extends StatelessWidget {
   /// Optional drag handle widget (dashboards pass ReorderableDragStartListener)
   final Widget? dragHandle;
 
-  final VoidCallback onToggleStar;
+  final VoidCallback? onToggleStar;
   final VoidCallback onToggleDone;
-  final VoidCallback onPickDueDate;
-  final VoidCallback onEdit;
-  final VoidCallback onLongPress;
+  final VoidCallback? onPickDueDate;
+  final VoidCallback? onEdit;
+  final VoidCallback? onLongPress;
 
   const TaskCard({
     super.key,
     required this.task,
     required this.isSelected,
-    required this.dragHandle,
-    required this.onToggleStar,
+    this.dragHandle,
+    this.onToggleStar,
     required this.onToggleDone,
-    required this.onPickDueDate,
-    required this.onEdit,
-    required this.onLongPress,
+    this.onPickDueDate,
+    this.onEdit,
+    this.onLongPress,
   });
 
   DateTime _todayStart() {
@@ -86,7 +86,7 @@ class TaskCard extends StatelessWidget {
   Widget _tapIcon({
     required BuildContext context,
     required IconData icon,
-    required VoidCallback onTap,
+    VoidCallback? onTap,
     required String tooltip,
   }) {
     return Tooltip(
@@ -116,85 +116,105 @@ class TaskCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
         onTap: onEdit,
-        onLongPress: onLongPress,
+        onLongPress: (dragHandle != null) ? null : onLongPress,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  if (dragHandle != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.30),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.drag_indicator_rounded, size: 18),
-                          const SizedBox(width: 4),
-                          dragHandle!,
-                        ],
-                      ),
+              Column(
+  crossAxisAlignment: CrossAxisAlignment.stretch,
+  children: [
+    Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Far-left drag handle (dashboard passes ReorderableDragStartListener)
+        if (dragHandle != null) dragHandle!,
+        if (dragHandle != null) const SizedBox(width: 8),
+
+        // Centered title (not cut off)
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Text(
+                task.title,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      decoration: task.isDone ? TextDecoration.lineThrough : null,
                     ),
-                  if (dragHandle != null) const SizedBox(width: 6),
-
-                  Expanded(
-                    child: Text(
-                      task.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            decoration: task.isDone
-                                ? TextDecoration.lineThrough
-                                : null,
-                          ),
-                    ),
-                  ),
-
-                  _tapIcon(
-                    context: context,
-                    icon: Icons.edit_rounded,
-                    onTap: onEdit,
-                    tooltip: 'Edit',
-                  ),
-
-                  _tapIcon(
-                    context: context,
-                    icon: task.isStarred
-                        ? Icons.star_rounded
-                        : Icons.star_border_rounded,
-                    onTap: onToggleStar,
-                    tooltip: 'Star',
-                  ),
-
-                  _tapIcon(
-                    context: context,
-                    icon: task.isDone
-                        ? Icons.check_circle_rounded
-                        : Icons.radio_button_unchecked_rounded,
-                    onTap: onToggleDone,
-                    tooltip: 'Done',
-                  ),
-
-                  _tapIcon(
-                    context: context,
-                    icon: Icons.calendar_month_rounded,
-                    onTap: onPickDueDate,
-                    tooltip: 'Due date',
-                  ),
-                ],
               ),
+            ),
+          ),
+        ),
 
-              const SizedBox(height: 10),
+        // Far-right side: star at the top-right corner + done centered on the right edge
+        SizedBox(
+          width: 52,
+          height: 44,
+          child: Stack(
+            children: [
+              Align(
+  alignment: Alignment.topRight,
+  child: Container(
+    decoration: BoxDecoration(
+      color: task.isStarred
+          ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)
+          : Colors.transparent,
+      shape: BoxShape.circle,
+    ),
+    child: _tapIcon(
+      context: context,
+      icon: Icons.star_rounded,
+onTap: onToggleStar,
+      tooltip: 'Star',
+    ),
+  ),
+),
+              Align(
+                alignment: Alignment.centerRight,
+                child: _tapIcon(
+                  context: context,
+                  icon: task.isDone
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  onTap: onToggleDone,
+                  tooltip: 'Done',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+
+const SizedBox(height: 4),
+
+// Pencil + calendar under the title (centered)
+Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+if (onEdit != null)        if (onEdit != null) _tapIcon(
+          context: context,
+          icon: Icons.edit_rounded,
+          onTap: onEdit,
+          tooltip: 'Edit',
+        ),
+if (onPickDueDate != null)        if (onPickDueDate != null) _tapIcon(
+          context: context,
+          icon: Icons.calendar_month_rounded,
+          onTap: onPickDueDate,
+          tooltip: 'Due date',
+        ),
+      ],
+    ),
+  ],
+),
+const SizedBox(height: 10),
 
               Wrap(
                 spacing: 10,

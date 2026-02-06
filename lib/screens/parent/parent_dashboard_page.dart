@@ -180,13 +180,16 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
                           ? ReorderableDragStartListener(
                               index: index,
                               child: const Padding(
-                                padding: EdgeInsets.all(6),
+                                padding: EdgeInsets.all(10),
                                 child: Icon(Icons.drag_handle_rounded),
                               ),
                             )
                           : const Padding(
-                              padding: EdgeInsets.all(6),
-                              child: Icon(Icons.drag_handle_rounded, color: Colors.grey),
+                              padding: EdgeInsets.all(10),
+                              child: Opacity(
+  opacity: 0.25,
+  child: Icon(Icons.drag_handle_rounded),
+),
                             ),
                       onToggleStar: () => toggleStar.run(service: service, taskId: t.id),
                       onToggleDone: () => toggleDone.run(service: service, taskId: t.id),
