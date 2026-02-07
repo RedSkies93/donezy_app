@@ -74,8 +74,9 @@ class TaskCard extends StatelessWidget {
         children: [
           Icon(icon, size: 16),
           const SizedBox(width: 6),
-          Text(
-            label,
+          Text(label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w900),
           ),
         ],
@@ -108,7 +109,7 @@ class TaskCard extends StatelessWidget {
     final due = task.dueDate;
 
     final pointsLabel = '${task.pointsValue} pts';
-    final dueLabel = (due == null)
+    final dueLabel = (onPickDueDate == null || due == null)
         ? 'No due'
         : (_isOverdue ? 'OVERDUE' : 'Due ${_mmdd(due)}');
 
@@ -130,12 +131,23 @@ class TaskCard extends StatelessWidget {
       children: [
         // Far-left drag handle (dashboard passes ReorderableDragStartListener)
         if (dragHandle != null)
-  Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(999),
-      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
-    ),
+          Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.35),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            blurRadius: 6,
+            offset: Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.06),
+          ),
+        ],
+          ),
     child: dragHandle!,
   ),
         if (dragHandle != null) const SizedBox(width: 12),
@@ -200,23 +212,24 @@ onTap: onToggleStar,
       ],
     ),
 
-const SizedBox(height: 4),
+const SizedBox(height: 8),
 
 // Pencil + calendar under the title (centered)
 Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-if (onEdit != null)        if (onEdit != null) _tapIcon(
+if (onEdit != null) _tapIcon(
           context: context,
           icon: Icons.edit_rounded,
           onTap: onEdit,
           tooltip: 'Edit',
         ),
-if (onPickDueDate != null)        if (onPickDueDate != null) _tapIcon(
+          if (onEdit != null && onPickDueDate != null) const SizedBox(width: 12),
+if (onPickDueDate != null) _tapIcon(
           context: context,
           icon: Icons.calendar_month_rounded,
           onTap: onPickDueDate,
-          tooltip: 'Due date',
+          tooltip: (onPickDueDate == null) ? 'No due date' : 'Set due date',
         ),
       ],
     ),
@@ -224,47 +237,48 @@ if (onPickDueDate != null)        if (onPickDueDate != null) _tapIcon(
 ),
 const SizedBox(height: 10),
 
-              Wrap(
-                spacing: 10,
-                runSpacing: 8,
-                children: [
-                  _pill(
-                    context,
-                    label: pointsLabel,
-                    strong: false,
-                    icon: Icons.bolt_rounded,
-                  ),
-                  _pill(
-                    context,
-                    label: dueLabel,
-                    strong: _isOverdue,
-                    icon: (due == null)
-                        ? Icons.event_busy_rounded
-                        : (_isOverdue
-                            ? Icons.warning_rounded
-                            : Icons.schedule_rounded),
-                  ),
-                  if (isSelected)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: cs.tertiary.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                          color: cs.tertiary.withValues(alpha: 0.30),
-                          width: 1,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _pill(
+                      context,
+                      label: pointsLabel,
+                      strong: false,
+                      icon: Icons.bolt_rounded,
+                    ),
+                    const SizedBox(width: 8),
+                    _pill(
+                      context,
+                      label: dueLabel,
+                      strong: (dueLabel != 'No due' && _isOverdue),
+                      icon: (dueLabel == 'No due')
+                          ? Icons.event_busy_rounded
+                          : (_isOverdue
+                              ? Icons.warning_rounded
+                              : Icons.schedule_rounded),
+                    ),
+                    if (isSelected)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: cs.tertiary.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: cs.tertiary.withValues(alpha: 0.30),
+                            width: 1,
+                          ),
+                        ),
+                        child: const Text(
+                          'SELECTED',
+                          style: TextStyle(fontWeight: FontWeight.w900),
                         ),
                       ),
-                      child: const Text(
-                        'SELECTED',
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                    ),
-                ],
-              ),
+                  ],
+                ),
             ],
           ),
         ),
@@ -272,6 +286,18 @@ const SizedBox(height: 10),
     );
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
