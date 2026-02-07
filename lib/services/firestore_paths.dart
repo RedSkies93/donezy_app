@@ -1,4 +1,8 @@
 class FirestorePaths {
-  // Phase 1: placeholder for future Firestore path helpers
-  // Keep all collection/doc paths centralized here in Phase 4.
+  static String familyDoc(String familyId) => 'families/$familyId';
+
+  static String tasksCol(String familyId) => '${familyDoc(familyId)}/tasks';
+  static String childrenCol(String familyId) => '${familyDoc(familyId)}/children';
+  static String rewardsCol(String familyId) => '${familyDoc(familyId)}/rewards';
+  static String chatsCol(String familyId) => '${familyDoc(familyId)}/chats';
 }

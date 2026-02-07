@@ -3,12 +3,11 @@ import 'auth_service.dart';
 import 'task_service.dart';
 import 'chat_service.dart';
 import 'rewards_service.dart';
-
 import 'task_store.dart';
 import 'child_store.dart';
 import 'chat_store.dart';
 import 'reward_claim_store.dart';
-
+import 'firestore_service.dart';
 import '../app/app_config.dart';
 
 class ServiceRegistry {
@@ -19,6 +18,8 @@ class ServiceRegistry {
 
   late final TaskStore taskStore;
   late final ChildStore childStore;
+
+  late final FirestoreService firestore;
   late final TaskService tasks;
 
   late final ChatStore chatStore;
@@ -33,7 +34,16 @@ class ServiceRegistry {
 
     taskStore = TaskStore();
     childStore = ChildStore();
-    tasks = TaskService(taskStore, childStore);
+
+    firestore = FirestoreService();
+
+    tasks = TaskService(
+      taskStore,
+      childStore,
+      config: config,
+      session: session,
+      firestore: firestore,
+    );
 
     chatStore = ChatStore();
     chat = ChatService(chatStore);

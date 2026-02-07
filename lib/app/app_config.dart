@@ -6,4 +6,8 @@ class AppConfig {
   });
 
   static const mockFirst = AppConfig(enableFirebase: false);
+
+  /// Phase 2 (live Firestore on)
+  static const liveFirebase = AppConfig(enableFirebase: true);
 }
+

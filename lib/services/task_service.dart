@@ -1,115 +1,188 @@
-import 'package:flutter/widgets.dart';
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../app/app_config.dart';
 import '../models/task_model.dart';
-import 'task_store.dart';
 import 'child_store.dart';
-import 'mock_data/mock_tasks.dart';
+import 'firestore_service.dart';
+import 'session_store.dart';
+import 'task_store.dart';
 
 class TaskService {
-final TaskStore store;
-  final ChildStore childStore;
+  TaskService(
+    this._store,
+    this._child, {
+    AppConfig? config,
+    SessionStore? session,
+    FirestoreService? firestore,
+  })  : _config = config,
+        _session = session,
+        _firestore = firestore;
 
-  TaskService(this.store, this.childStore);
+  final TaskStore _store;
+  final ChildStore _child;
 
-  Future<void> load() async {
-WidgetsBinding.instance.addPostFrameCallback((_) {
-      store.setTasks(MockTasks.seed());
-});
+  final AppConfig? _config;
+  final SessionStore? _session;
+  final FirestoreService? _firestore;
+
+  StreamSubscription<List<TaskModel>>? _sub;
+
+  bool get _firebaseOn => (_config?.enableFirebase ?? false) && _firestore != null && _session != null;
+
+  Future<void> _ensureSignedIn() async {
+    if (!_firebaseOn) return;
+
+    final auth = FirebaseAuth.instance;
+    final existing = auth.currentUser;
+    if (existing != null) {
+      _session!.setUserId(existing.uid);
+      return;
+    }
+
+    final cred = await auth.signInAnonymously();
+    _session!.setUserId(cred.user?.uid ?? '');
+  }
+
+  /// Called by dashboards (Phase 2) — keeps UI live with Firestore.
+  Future<void> loadTasks() async {
+    if (!_firebaseOn) return;
+
+    await _ensureSignedIn();
+
+    await _sub?.cancel();
+    _sub = _firestore!.watchTasks(_session!.familyId).listen((tasks) {
+      _store.replaceAll(tasks);
+    });
+  }
+
+  void dispose() {
+    _sub?.cancel();
+    _sub = null;
+  }
+
+  // ---------------------------------------------------------
+  // Existing API used by Actions/UI
+  // ---------------------------------------------------------
+
+  Future<void> addTask(String title) async {
+    final nextOrder = _store.tasks.length;
+
+    final task = TaskModel(
+      id: '',
+      title: title,
+      pointsValue: 1,
+      dueDate: null,
+      isCompleted: false,
+      isStarred: false,
+      isEnabled: true,
+      order: nextOrder,
+    );
+
+    if (_firebaseOn) {
+      await _ensureSignedIn();
+      await _firestore!.addTask(_session!.familyId, task);
+      return;
+    }
+
+    // Offline fallback
+    _store.addLocal(task.copyWith(id: DateTime.now().microsecondsSinceEpoch.toString()));
+  }
+
+  Future<void> toggleDone(String taskId) async {
+    final t = _store.tasks.where((x) => x.id == taskId).cast<TaskModel?>().firstWhere((x) => x != null, orElse: () => null);
+    if (t == null) return;
+
+    final updated = t.copyWith(isCompleted: !t.isCompleted);
+    _store.upsertLocal(updated);
+
+    if (_firebaseOn) {
+      await _ensureSignedIn();
+      await _firestore!.updateTask(_session!.familyId, updated);
+    }
   }
 
   Future<void> toggleStar(String taskId) async {
-    final t = store.tasks.firstWhere((x) => x.id == taskId);
-    store.updateTask(t.copyWith(isStarred: !t.isStarred));
-  }
+    final t = _store.tasks.where((x) => x.id == taskId).cast<TaskModel?>().firstWhere((x) => x != null, orElse: () => null);
+    if (t == null) return;
 
-  Future<void> addTask(String title) async {
-    final clean = title.trim();
-    if (clean.isEmpty) return;
+    final updated = t.copyWith(isStarred: !t.isStarred);
+    _store.upsertLocal(updated);
 
-    final id = 't_${DateTime.now().microsecondsSinceEpoch}';
-    final maxOrder = store.tasks.isEmpty
-        ? -1
-        : store.tasks.map((t) => t.order).reduce((a, b) => a > b ? a : b);
-
-    final created = TaskModel(
-      id: id,
-      title: clean,
-      isStarred: false,
-      isEnabled: true,
-      isDone: false,
-      pointsValue: 10,
-      order: maxOrder + 1,
-      dueDate: null,
-    );
-
-    store.setTasks([...store.tasks, created]);
-  }
-
-  Future<void> renameTask(String taskId, String newTitle) async {
-    final clean = newTitle.trim();
-    if (clean.isEmpty) return;
-
-    final t = store.tasks.firstWhere((x) => x.id == taskId);
-    store.updateTask(t.copyWith(title: clean));
-  }
-
-  Future<void> setPointsValue(String taskId, int pointsValue) async {
-    final t = store.tasks.firstWhere((x) => x.id == taskId);
-    final safe = pointsValue.clamp(0, 999);
-    store.updateTask(t.copyWith(pointsValue: safe));
-  }
-
-  Future<void> setDueDate(String taskId, DateTime? dueDate) async {
-    final t = store.tasks.firstWhere((x) => x.id == taskId);
-    final dateOnly = dueDate == null ? null : DateTime(dueDate.year, dueDate.month, dueDate.day);
-    store.updateTask(t.copyWith(dueDate: dateOnly));
+    if (_firebaseOn) {
+      await _ensureSignedIn();
+      await _firestore!.updateTask(_session!.familyId, updated);
+    }
   }
 
   Future<void> deleteTask(String taskId) async {
-    store.setTasks(store.tasks.where((t) => t.id != taskId).toList());
+    _store.deleteLocal(taskId);
+
+    if (_firebaseOn) {
+      await _ensureSignedIn();
+      await _firestore!.deleteTask(_session!.familyId, taskId);
+    }
   }
 
   Future<void> deleteMany(Set<String> ids) async {
     if (ids.isEmpty) return;
-    store.setTasks(store.tasks.where((t) => !ids.contains(t.id)).toList());
-  }
 
-  Future<void> toggleDone(String taskId) async {
-    final t = store.tasks.firstWhere((x) => x.id == taskId);
-    final nextDone = !t.isDone;
-
-    if (nextDone) {
-      childStore.earn(t.pointsValue);
-    } else {
-      childStore.spend(t.pointsValue);
+    for (final id in ids) {
+      _store.deleteLocal(id);
     }
 
-    store.updateTask(t.copyWith(isDone: nextDone));
+    if (_firebaseOn) {
+      await _ensureSignedIn();
+      await _firestore!.deleteMany(_session!.familyId, ids);
+    }
+  }
+
+  Future<void> renameTask(String taskId, String newTitle) async {
+    final t = _store.tasks.where((x) => x.id == taskId).cast<TaskModel?>().firstWhere((x) => x != null, orElse: () => null);
+    if (t == null) return;
+
+    final updated = t.copyWith(title: newTitle);
+    _store.upsertLocal(updated);
+
+    if (_firebaseOn) {
+      await _ensureSignedIn();
+      await _firestore!.updateTask(_session!.familyId, updated);
+    }
+  }
+
+  Future<void> setPointsValue(String taskId, int points) async {
+    final t = _store.tasks.where((x) => x.id == taskId).cast<TaskModel?>().firstWhere((x) => x != null, orElse: () => null);
+    if (t == null) return;
+
+    final updated = t.copyWith(pointsValue: points);
+    _store.upsertLocal(updated);
+
+    if (_firebaseOn) {
+      await _ensureSignedIn();
+      await _firestore!.updateTask(_session!.familyId, updated);
+    }
+  }
+
+  Future<void> setDueDate(String taskId, DateTime? dueDate) async {
+    final t = _store.tasks.where((x) => x.id == taskId).cast<TaskModel?>().firstWhere((x) => x != null, orElse: () => null);
+    if (t == null) return;
+
+    final updated = t.copyWith(dueDate: dueDate);
+    _store.upsertLocal(updated);
+
+    if (_firebaseOn) {
+      await _ensureSignedIn();
+      await _firestore!.updateTask(_session!.familyId, updated);
+    }
   }
 
   Future<void> reorder(int oldIndex, int newIndex) async {
-    final list = store.tasks.toList();
-    if (oldIndex < 0 || oldIndex >= list.length) return;
+    final ordered = _store.reorderLocal(oldIndex, newIndex);
 
-    if (newIndex > oldIndex) newIndex -= 1;
-
-    // Clamp to valid insertion range
-    if (newIndex < 0) newIndex = 0;
-    if (newIndex > list.length - 1) newIndex = list.length - 1;
-
-    final item = list.removeAt(oldIndex);
-    list.insert(newIndex, item);
-
-    final reOrdered = <TaskModel>[];
-    for (var i = 0; i < list.length; i++) {
-      reOrdered.add(list[i].copyWith(order: i));
+    if (_firebaseOn) {
+      await _ensureSignedIn();
+      await _firestore!.batchUpdateOrder(_session!.familyId, ordered);
     }
-
-    store.setTasks(reOrdered);
   }
 }
-
-
-
-
-
-
