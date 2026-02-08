@@ -1,5 +1,5 @@
 class AssetRegistry {
-  // NOTE: Phase 1/2 placeholders. Widgets/screens never hardcode paths.
+  // NOTE: Phase 1/2 notes. Widgets/screens never hardcode paths.
 
   // Backgrounds
   static const bgLogin = 'assets/backgrounds/screens/login/bg_login.png';
@@ -10,7 +10,7 @@ class AssetRegistry {
   static const bgSettings =
       'assets/backgrounds/screens/settings/bg_settings.png';
 
-  // Icons (example placeholders)
+  // Icons (examples)
   static const icNavTasks = 'assets/icons/nav/ic_tasks.png';
   static const icNavChat = 'assets/icons/nav/ic_chat.png';
   static const icNavAwards = 'assets/icons/nav/ic_awards.png';
