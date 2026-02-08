@@ -10,10 +10,6 @@ import 'session_store.dart';
 import 'task_store.dart';
 
 class TaskService {
-
-  // Family scope (single source of truth)
-  String get _familyId => _session?.familyId ?? 'demo_family';
-
   TaskService(
     this._store,
     this._child, {
@@ -53,14 +49,22 @@ final ChildStore _child;
   /// Called by dashboards (Phase 2) — keeps UI live with Firestore.
   // Compatibility shim: screens call TaskService.load()
     // Phase 2: Firebase read-first (demo family), fallback to local/mock.
-  Future<void> load() async {
+    Future<void> load() async {
+    const familyId = 'demo_family';
+
     try {
       final fs = _firestore;
       if (fs != null) {
-        final items = await fs.readTasks(_familyId);
+        final items = await fs.readTasks(familyId);
         _store.replaceAll(items);
         return;
       }
+    } catch (_) {
+      // fall through
+    }
+
+    await loadTasks();
+  }
     } catch (_) {
       // fall through
     }
@@ -102,9 +106,7 @@ final ChildStore _child;
 
     if (_firebaseOn) {
       await _ensureSignedIn();
-      await loadTasks();
       await _firestore!.addTask(_session!.familyId, task);
-      await loadTasks();
       return;
     }
 
@@ -207,6 +209,7 @@ final ChildStore _child;
       await _firestore!.batchUpdateOrder(_session!.familyId, ordered);
     }
   }
+
 }
 
 

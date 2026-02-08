@@ -119,5 +119,46 @@ void toggleSelected(String taskId) {
     _selectedIds.clear();
     notifyListeners();
   }
-}
+  // ---------------------------------------------------------
+  // Phase 2 compatibility helpers (used by TaskService)
+  // ---------------------------------------------------------
+  void replaceAll(List<TaskModel> items) => setTasks(items);
 
+  void addLocal(TaskModel task) {
+    final next = _tasks.toList()..add(task);
+    setTasks(next.cast<TaskModel>());
+  }
+
+  void upsertLocal(TaskModel task) {
+    final idx = _tasks.indexWhere((t) => t.id == task.id);
+    if (idx < 0) {
+      addLocal(task);
+      return;
+    }
+    updateTask(task);
+  }
+
+  void deleteLocal(String taskId) {
+    final next = _tasks.where((t) => t.id != taskId).toList();
+    setTasks(next.cast<TaskModel>());
+  }
+
+  /// Reorders the *full* list order (ignores filter). Returns the updated list for persistence.
+  List<TaskModel> reorderLocal(int oldIndex, int newIndex) {
+    final list = _tasks.toList().cast<TaskModel>();
+    if (oldIndex < 0 || oldIndex >= list.length) return list;
+    if (newIndex < 0) newIndex = 0;
+    if (newIndex > list.length) newIndex = list.length;
+
+    if (newIndex > oldIndex) newIndex -= 1;
+    final item = list.removeAt(oldIndex);
+    list.insert(newIndex, item);
+
+    final updated = <TaskModel>[];
+    for (var i = 0; i < list.length; i++) {
+      updated.add(list[i].copyWith(order: i));
+    }
+    setTasks(updated);
+    return updated;
+  }
+}

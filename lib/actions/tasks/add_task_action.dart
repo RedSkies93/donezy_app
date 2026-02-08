@@ -58,6 +58,10 @@ class AddTaskAction {
     }
 
     await service.addTask(title);
+
+    await service.loadTasks();
     return const ActionResult.success();
   }
 }
+
+

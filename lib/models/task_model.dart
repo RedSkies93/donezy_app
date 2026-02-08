@@ -14,7 +14,7 @@ class TaskModel {
 
   final DateTime? dueDate;
 
-  const TaskModel({
+  bool get isCompleted => isDone; const TaskModel({
     required this.id,
     required this.title,
     this.isStarred = false,
@@ -25,7 +25,7 @@ class TaskModel {
     this.dueDate,
   });
 
-  TaskModel copyWith({
+  TaskModel copyWith({ String? id, bool? isCompleted, 
     String? title,
     bool? isStarred,
     bool? isEnabled,
@@ -35,14 +35,15 @@ class TaskModel {
     DateTime? dueDate,
   }) {
     return TaskModel(
-      id: id,
+      id: id ?? this.id,
       title: title ?? this.title,
       isStarred: isStarred ?? this.isStarred,
       isEnabled: isEnabled ?? this.isEnabled,
-      isDone: isDone ?? this.isDone,
+      isDone: isDone ?? isCompleted ?? this.isDone,
       pointsValue: pointsValue ?? this.pointsValue,
       order: order ?? this.order,
       dueDate: dueDate ?? this.dueDate,
     );
   }
 }
+

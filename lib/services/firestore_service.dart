@@ -72,7 +72,7 @@ class FirestoreService {
       title: (m['title'] as String?) ?? '',
       pointsValue: (m['pointsValue'] as int?) ?? 1,
       dueDate: due,
-      isCompleted: (m['isCompleted'] as bool?) ?? false,
+      isDone: (m['isDone'] as bool?) ?? false,
       isStarred: (m['isStarred'] as bool?) ?? false,
       isEnabled: (m['isEnabled'] as bool?) ?? true,
       order: (m['order'] as int?) ?? 0,
@@ -85,11 +85,38 @@ class FirestoreService {
       'title': t.title,
       'pointsValue': t.pointsValue,
       'dueDate': t.dueDate == null ? null : Timestamp.fromDate(t.dueDate!),
-      'isCompleted': t.isCompleted,
+      'isDone': t.isDone,
       'isStarred': t.isStarred,
       'isEnabled': t.isEnabled,
       'order': t.order,
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
+  // Phase 2 (read-only): fetch tasks for a family.
+  // Path: /families/{familyId}/tasks
+  Future<List<TaskModel>> readTasks(String familyId) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('families')
+        .doc(familyId)
+        .collection('tasks')
+        .get();
+
+    final out = <TaskModel>[];
+    for (final d in snap.docs) {
+      final data = d.data();
+      out.add(TaskModel(
+      id: d.id,
+      title: (data['title'] as String?) ?? '',
+      isStarred: (data['isStarred'] as bool?) ?? false,
+      isEnabled: (data['isEnabled'] as bool?) ?? true,
+      isDone: (data['isDone'] as bool?) ?? false,
+      pointsValue: (data['points'] as int?) ?? (data['pointsValue'] as int?) ?? 0,
+      order: (data['order'] as int?) ?? 0,
+      dueDate: (data['dueDate'] is Timestamp) ? (data['dueDate'] as Timestamp).toDate() : null,
+      ));
+    }
+    return out;
+  }
 }
+
+

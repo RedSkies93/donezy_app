@@ -10,6 +10,7 @@ class AuthService {
   }
 
   Future<void> signOut() async {
-    session.userId = null;
+    session.userId = '';
   }
 }
+

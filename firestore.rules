@@ -2,14 +2,24 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // -----------------------------
+    
+  // ---------------------------------------------------------
+  // DONEZY DEV UNBLOCK: families/{familyId}/tasks/*
+  // Allows any authenticated user (DEV only). Tighten later.
+  // ---------------------------------------------------------
+  match /families/{familyId}/tasks/{taskId} {
+    allow read, write: if request.auth != null;
+  }
+// -----------------------------
     // Helpers
     // -----------------------------
     function signedIn() {
       return request.auth != null;
     }
-
-    function isParent(parentUid) {
+    function reqChatId() {
+      return request.resource.data.chatId;
+    }
+function isParent(parentUid) {
       return signedIn() && request.auth.uid == parentUid;
     }
 
@@ -19,8 +29,8 @@ service cloud.firestore {
 
     function isChildOf(parentUid, childId) {
       return signedIn()
-        && childDoc(parentUid, childId).exists()
-        && childDoc(parentUid, childId).data.childAuthUid == request.auth.uid;
+        && exists(childDoc(parentUid, childId))
+        && get(childDoc(parentUid, childId)).data.childAuthUid == request.auth.uid;
     }
 
     // Validate that a child is only updating allowed fields when completing a task
@@ -121,9 +131,9 @@ service cloud.firestore {
 
       // -----------------------------
       // Chats
-      // parents/{parentUid}/chats/{chatId}
+      // parents/{parentUid}/chats/{chatid}
       // -----------------------------
-      match /chats/{chatId} {
+      match /chats/{chatid} {
 
   // Parent full access
   allow read, write: if isParent(parentUid);
@@ -155,13 +165,13 @@ service cloud.firestore {
   // Child can read messages only if they are a member
   allow read: if signedIn()
     && request.auth.uid in get(
-      /databases/$(database)/documents/parents/$(parentUid)/chats/$(chatId)
+      /databases/$(database)/documents/parents/$(parentUid)/chats/$(reqChatId())
     ).data.membersAuthUids;
 
   // Child can SEND messages (senderId must equal their auth uid)
   allow create: if signedIn()
     && request.auth.uid in get(
-      /databases/$(database)/documents/parents/$(parentUid)/chats/$(chatId)
+      /databases/$(database)/documents/parents/$(parentUid)/chats/$(reqChatId())
     ).data.membersAuthUids
     && request.resource.data.keys().hasOnly([
       'text',
@@ -172,10 +182,10 @@ service cloud.firestore {
     && request.resource.data.text is string
     && request.resource.data.senderId == request.auth.uid;
 
-  // Child can ONLY update seenBy (👀)
+  // Child can ONLY update seenBy (ðŸ‘€)
   allow update: if signedIn()
     && request.auth.uid in get(
-      /databases/$(database)/documents/parents/$(parentUid)/chats/$(chatId)
+      /databases/$(database)/documents/parents/$(parentUid)/chats/$(reqChatId())
     ).data.membersAuthUids
     && request.resource.data.diff(resource.data).changedKeys().hasOnly(['seenBy'])
     && request.resource.data.seenBy is list;
@@ -185,5 +195,8 @@ service cloud.firestore {
 
       }
     }
-  }
+    // ---------------------------------------------------------
+  // DONEZY DEV UNBLOCK: tasks under families/{familyId}/tasks/*
+  // NOTE: This allows any signed-in user. Tighten later to real membership checks.
+  // ---------------------------------------------------------
 }

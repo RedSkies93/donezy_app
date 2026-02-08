@@ -28,3 +28,5 @@ _ai_input/
 *.bak_*
 raw_all_repo_files.txt
 raw_dart_and_pubspec.txt
+raw_task_links.txt
+raw_rasks_links.txt
