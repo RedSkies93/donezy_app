@@ -1,4 +1,4 @@
 class AppText {
-  // Phase 1 placeholder; typography system in later phase
+  // Phase 1: typography tokens live here. Expand in later phase (no behavior change).
   static const appName = 'Donezy';
 }

@@ -6,7 +6,7 @@ class BouncyList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Phase 1: placeholder; Phase 2 adds bounce physics feel
+    // Phase 1: simple wrapper. Phase 2 adds bounce physics feel (no behavior risk now).
     return ListView(children: children);
   }
 }
