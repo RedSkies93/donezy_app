@@ -1,0 +1,18 @@
+# Text defaults
+* text=auto
+
+# Force LF for source + docs (prevents CRLF churn and odd unicode/emoji corruption)
+*.dart  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.json  text eol=lf
+
+# Treat images/binaries correctly
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
