@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+﻿import 'package:flutter/foundation.dart';
 import '../models/task_model.dart';
 
 enum TaskFilterMode {
@@ -141,7 +141,11 @@ void toggleSelected(String taskId) {
     final index = _tasks.indexWhere((t) => t.id == updated.id);
     if (index == -1) return;
 
-    _tasks[index] = updated;
+    final next = _tasks.toList();
+    next[index] = updated;
+    next.sort((a, b) => a.order.compareTo(b.order));
+    _tasks = List.unmodifiable(next);
+
     notifyListeners();
   }
 
@@ -169,5 +173,4 @@ void toggleSelected(String taskId) {
     return updated;
   }
 }
-
 

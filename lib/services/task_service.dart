@@ -1,7 +1,6 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
-
 
 import '../app/app_config.dart';
 
@@ -14,7 +13,6 @@ import 'firestore_service.dart';
 import 'session_store.dart';
 
 import 'task_store.dart';
-
 
 class TaskService {
 
@@ -57,7 +55,7 @@ final ChildStore _child;
     _session!.setUserId(cred.user?.uid ?? '');
   }
 
-  /// Called by dashboards (Phase 2) — keeps UI live with Firestore.
+  /// Called by dashboards (Phase 2) â€” keeps UI live with Firestore.
   // Compatibility shim: screens call TaskService.load()
     // Phase 2: Firebase read-first (demo family), fallback to local/mock.
   Future<void> load() async {
@@ -131,7 +129,7 @@ final ChildStore _child;
 
     final updated = t.copyWith(isDone: !t.isDone);
 
-      // Optimistic local update (Parent ↔ Child immediate reflection)
+      // Optimistic local update (Parent â†” Child immediate reflection)
       _store.updateLocal(updated);
     _store.upsertLocal(updated);
 
@@ -222,7 +220,6 @@ final ChildStore _child;
       await _firestore!.updateTask(_familyId, updated);
     }
   }
-
   Future<void> reorder(int oldIndex, int newIndex) async {
     final ordered = _store.reorderLocal(oldIndex, newIndex);
 
@@ -232,13 +229,4 @@ final ChildStore _child;
     }
   }
 }
-
-
-
-
-
-
-
-
-
 
