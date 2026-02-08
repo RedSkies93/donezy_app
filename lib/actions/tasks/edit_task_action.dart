@@ -25,11 +25,12 @@ class EditTaskAction {
         task.id,
         title: changedTitle ? newTitle : null,
         pointsValue: changedPoints ? result.pointsValue : null,
-        dueDate: (!result.clearDueDate && result.dueDate != task.dueDate) ? result.dueDate : null,
+        dueDate: (!result.clearDueDate && result.dueDate != task.dueDate)
+            ? result.dueDate
+            : null,
         clearDueDate: result.clearDueDate,
       );
     }
-
 
     return const ActionResult.success();
   }

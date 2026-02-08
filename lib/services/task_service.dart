@@ -185,42 +185,25 @@ class TaskService {
     }
   }
 
-  
   Future<void> editTask(
-
     String taskId, {
-
     String? title,
-
     int? pointsValue,
-
     DateTime? dueDate,
-
     bool clearDueDate = false,
-
   }) async {
-
     final t = _store.tasks
-
         .where((x) => x.id == taskId)
-
         .cast<TaskModel?>()
-
         .firstWhere((x) => x != null, orElse: () => null);
 
     if (t == null) return;
 
-
     final updated = t.copyWith(
-
       title: title ?? t.title,
-
       pointsValue: pointsValue ?? t.pointsValue,
-
       dueDate: clearDueDate ? null : (dueDate ?? t.dueDate),
-
     );
-
 
     // Optimistic local update (immediate UI reflection)
 
@@ -228,17 +211,12 @@ class TaskService {
 
     _store.upsertLocal(updated);
 
-
     if (_firebaseOn) {
-
       await _ensureSignedIn();
 
       await _firestore!.updateTask(_familyId, updated);
-
     }
-
   }
-
 
   Future<void> renameTask(String taskId, String newTitle) async {
     final t = _store.tasks
@@ -303,4 +281,3 @@ class TaskService {
     }
   }
 }
-
