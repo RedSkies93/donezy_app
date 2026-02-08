@@ -72,7 +72,7 @@ class AwardsPage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Rewards Store \u{1F381}' \u{1F381}',
+                    'Rewards Store \u{1F381}',
                     style: Theme.of(context)
                         .textTheme
                         .titleLarge
@@ -88,7 +88,7 @@ class AwardsPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Recent Claims \u{1F9FE}' \u{1F9FE}',
+                    'Recent Claims \u{1F9FE}',
                     style: Theme.of(context)
                         .textTheme
                         .titleMedium
