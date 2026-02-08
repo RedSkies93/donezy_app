@@ -36,7 +36,8 @@ class DonezyApp extends StatelessWidget {
         ),
 
         // Expose services/stores (keeps UI clean later; actions can read from Provider)
-        ProxyProvider<ServiceRegistry, SessionStore>(
+        ChangeNotifierProxyProvider<ServiceRegistry, SessionStore>(
+          create: (_) => SessionStore(),
           update: (_, reg, __) => reg.session,
         ),
         ProxyProvider<ServiceRegistry, AuthService>(
@@ -88,6 +89,7 @@ class DonezyApp extends StatelessWidget {
     );
   }
 }
+
 
 
 

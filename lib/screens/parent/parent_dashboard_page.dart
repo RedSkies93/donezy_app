@@ -9,12 +9,13 @@ import '../../widgets/points_pill.dart';
 import '../../widgets/tasks/task_card.dart';
 import '../../widgets/tasks/bulk_action_bar.dart';
 import '../../widgets/tasks/task_filter_row.dart';
-
+import '../../widgets/tasks/child_selector_row.dart';
 import '../../core/asset_registry.dart';
 import '../../core/constants.dart';
 
 import '../../services/task_service.dart';
 import '../../services/task_store.dart';
+import '../../services/session_store.dart';
 import '../../services/child_store.dart';
 
 import '../../actions/tasks/add_task_action.dart';
@@ -55,6 +56,14 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
     final points = context.watch<ChildStore>().points;
     final service = context.read<TaskService>();
 
+    final session = context.watch<SessionStore>();
+    final selectedChildId = session.selectedChildId;
+
+    final visible = selectedChildId == null
+        ? taskStore.visibleTasks
+        : taskStore.visibleTasks
+            .where((t) => t.childId == selectedChildId)
+            .toList(growable: false);
     final toggleStar = ToggleStarAction();
     final toggleDone = ToggleDoneAction();
     final toggleBulk = ToggleBulkModeAction();
@@ -65,9 +74,6 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
     final goMsg = GoToMessagesAction();
     final goAwards = GoToAwardsAction();
     final goSettings = GoToSettingsAction();
-
-    final visible = taskStore.visibleTasks;
-
     final canReorder = taskStore.filter == TaskFilterMode.all && !taskStore.bulkMode;
 
     void selectAllVisible() {
@@ -121,6 +127,8 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
               ),
             ),
             const SizedBox(height: AppSpacing.cardGap),
+            const ChildSelectorRow(),
+            const SizedBox(height: 10),
 
             TaskFilterRow(
               selectedIndex: taskStore.filter.index,
@@ -211,6 +219,8 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
     );
   }
 }
+
+
 
 
 

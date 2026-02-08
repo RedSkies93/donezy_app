@@ -1,3 +1,5 @@
+import 'package:provider/provider.dart';
+import '../../services/session_store.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/action_result.dart';
@@ -56,12 +58,12 @@ class AddTaskAction {
     if (title.isEmpty) {
       return const ActionResult.failure('Task title is required.');
     }
+    final selectedChildId = Provider.of<SessionStore>(context, listen: false).selectedChildId;
 
-    await service.addTask(title);
-
-    await service.loadTasks();
+    await service.addTask(title, childId: selectedChildId);
     return const ActionResult.success();
   }
 }
+
 
 

@@ -4,6 +4,7 @@ class TaskModel {
 
   final bool isStarred;
   final bool isEnabled;
+  final String? childId;
 
   // Phase 3: completion + points
   final bool isDone;
@@ -20,6 +21,7 @@ class TaskModel {
     this.isStarred = false,
     this.isEnabled = true,
     this.isDone = false,
+    this.childId,
     this.pointsValue = 10,
     this.order = 0,
     this.dueDate,
@@ -33,6 +35,7 @@ class TaskModel {
     int? pointsValue,
     int? order,
     DateTime? dueDate,
+    String? childId,
   }) {
     return TaskModel(
       id: id ?? this.id,
@@ -43,6 +46,7 @@ class TaskModel {
       pointsValue: pointsValue ?? this.pointsValue,
       order: order ?? this.order,
       dueDate: dueDate ?? this.dueDate,
+      childId: childId ?? this.childId,
     );
   }
 }

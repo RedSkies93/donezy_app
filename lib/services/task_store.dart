@@ -137,6 +137,13 @@ void toggleSelected(String taskId) {
     }
     updateTask(task);
   }
+  void updateLocal(TaskModel updated) {
+    final index = _tasks.indexWhere((t) => t.id == updated.id);
+    if (index == -1) return;
+
+    _tasks[index] = updated;
+    notifyListeners();
+  }
 
   void deleteLocal(String taskId) {
     final next = _tasks.where((t) => t.id != taskId).toList();
@@ -162,3 +169,5 @@ void toggleSelected(String taskId) {
     return updated;
   }
 }
+
+
