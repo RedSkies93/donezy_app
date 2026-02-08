@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../actions/tasks/edit_task_action.dart';
 import 'package:provider/provider.dart';
-
 import '../../widgets/app_shell.dart';
 import '../../widgets/pastel_card.dart';
 import '../../widgets/screen_background.dart';
@@ -9,24 +9,19 @@ import '../../widgets/points_pill.dart';
 import '../../widgets/tasks/task_card.dart';
 import '../../widgets/tasks/bulk_action_bar.dart';
 import '../../widgets/tasks/task_filter_row.dart';
-
 import '../../core/asset_registry.dart';
 import '../../core/constants.dart';
-
 import '../../services/task_service.dart';
 import '../../services/task_store.dart';
 import '../../services/child_store.dart';
-
 import '../../actions/tasks/add_task_action.dart';
 import '../../actions/tasks/toggle_done_action.dart';
 import '../../actions/tasks/toggle_bulk_mode_action.dart';
 import '../../actions/tasks/confirm_bulk_delete_action.dart';
-
 import '../../actions/navigation/go_to_child_dashboard_action.dart';
 import '../../actions/navigation/go_to_messages_action.dart';
 import '../../actions/navigation/go_to_awards_action.dart';
 import '../../actions/navigation/go_to_settings_action.dart';
-
 class ChildDashboardPage extends StatefulWidget {
   const ChildDashboardPage({super.key});
 
@@ -161,7 +156,13 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
                       onToggleDone: () =>
                           toggleDone.run(service: service, taskId: t.id),
                       onPickDueDate: null, // child: hidden
-                      onEdit: null, // child: hidden
+                      onEdit: () async {
+                        await EditTaskAction().run(
+                          context: context,
+                          service: service,
+                          task: t,
+                        );
+                      },
 
                       onLongPress: null, // child: hidden
                     ),

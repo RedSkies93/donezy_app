@@ -15,20 +15,21 @@ class EditTaskAction {
     if (result == null) return const ActionResult.cancelled();
 
     // Apply changes (mock-first)
-    if (result.title.trim() != task.title) {
-      await service.renameTask(task.id, result.title);
+    final newTitle = result.title.trim();
+    final changedTitle = newTitle != task.title;
+    final changedPoints = result.pointsValue != task.pointsValue;
+    final changedDue = result.clearDueDate || (result.dueDate != task.dueDate);
+
+    if (changedTitle || changedPoints || changedDue) {
+      await service.editTask(
+        task.id,
+        title: changedTitle ? newTitle : null,
+        pointsValue: changedPoints ? result.pointsValue : null,
+        dueDate: (!result.clearDueDate && result.dueDate != task.dueDate) ? result.dueDate : null,
+        clearDueDate: result.clearDueDate,
+      );
     }
 
-    if (result.pointsValue != task.pointsValue) {
-      await service.setPointsValue(task.id, result.pointsValue);
-    }
-
-    // Due date: either clear or set
-    if (result.clearDueDate) {
-      await service.setDueDate(task.id, null);
-    } else if (result.dueDate != task.dueDate) {
-      await service.setDueDate(task.id, result.dueDate);
-    }
 
     return const ActionResult.success();
   }
