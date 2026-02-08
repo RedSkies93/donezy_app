@@ -101,22 +101,24 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
                 children: [
                   Text(
                     'Hey Superstar ⭐',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w900),
                   ),
                   PointsPill(points: points),
                 ],
               ),
             ),
             const SizedBox(height: AppSpacing.cardGap),
-
             TaskFilterRow(
               selectedIndex: taskStore.filter.index,
               onSelect: (i) => taskStore.setFilter(TaskFilterMode.values[i]),
             ),
             const SizedBox(height: AppSpacing.cardGap),
-
             BubbleButton(
-              onPressed: () => AddTaskAction().run(context: context, service: service),
+              onPressed: () =>
+                  AddTaskAction().run(context: context, service: service),
               child: const Text('Add Task'),
             ),
             const SizedBox(height: 10),
@@ -125,7 +127,6 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
               child: Text(taskStore.bulkMode ? 'Exit Bulk Mode' : 'Bulk Mode'),
             ),
             const SizedBox(height: AppSpacing.cardGap),
-
             if (taskStore.bulkMode)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -134,10 +135,10 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
                   onSelectAllVisible: selectAllVisible,
                   onClear: taskStore.clearSelection,
                   onCancel: () => taskStore.setBulkMode(false),
-                  onDelete: () => confirmBulkDelete.run(context: context, service: service, store: taskStore),
+                  onDelete: () => confirmBulkDelete.run(
+                      context: context, service: service, store: taskStore),
                 ),
               ),
-
             if (visible.isEmpty)
               const PastelCard(child: Text('No tasks match this filter yet.'))
             else
@@ -154,15 +155,15 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
                     child: TaskCard(
                       task: t,
                       isSelected: taskStore.isSelected(t.id),
-                                            dragHandle: null,
-onToggleStar: null, // child: hidden
+                      dragHandle: null,
+                      onToggleStar: null, // child: hidden
 
-                      onToggleDone: () => toggleDone.run(service: service, taskId: t.id),
+                      onToggleDone: () =>
+                          toggleDone.run(service: service, taskId: t.id),
                       onPickDueDate: null, // child: hidden
                       onEdit: null, // child: hidden
-                      
+
                       onLongPress: null, // child: hidden
-                      
                     ),
                   );
                 },
@@ -173,7 +174,3 @@ onToggleStar: null, // child: hidden
     );
   }
 }
-
-
-
-

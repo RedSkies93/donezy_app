@@ -24,7 +24,8 @@ import '../../actions/tasks/toggle_star_action.dart';
 import '../../actions/tasks/toggle_done_action.dart';
 import '../../actions/tasks/toggle_bulk_mode_action.dart';
 import '../../actions/tasks/confirm_bulk_delete_action.dart';
-import '../../actions/tasks/pick_due_date_action.dart'; import '../../actions/tasks/reorder_tasks_action.dart';
+import '../../actions/tasks/pick_due_date_action.dart';
+import '../../actions/tasks/reorder_tasks_action.dart';
 
 import '../../actions/navigation/go_to_dashboard_action.dart';
 import '../../actions/navigation/go_to_messages_action.dart';
@@ -74,7 +75,8 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
     final goMsg = GoToMessagesAction();
     final goAwards = GoToAwardsAction();
     final goSettings = GoToSettingsAction();
-    final canReorder = taskStore.filter == TaskFilterMode.all && !taskStore.bulkMode;
+    final canReorder =
+        taskStore.filter == TaskFilterMode.all && !taskStore.bulkMode;
 
     void selectAllVisible() {
       taskStore.selectAll(visible.map((t) => t.id));
@@ -114,10 +116,15 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
                       children: [
                         Text(
                           'Today’s Tasks ✅',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 8),
-                        Text(taskStore.bulkMode ? 'Bulk mode: long-press to select.' : 'Use the grip to reorder.'),
+                        Text(taskStore.bulkMode
+                            ? 'Bulk mode: long-press to select.'
+                            : 'Use the grip to reorder.'),
                       ],
                     ),
                   ),
@@ -129,15 +136,14 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
             const SizedBox(height: AppSpacing.cardGap),
             const ChildSelectorRow(),
             const SizedBox(height: 10),
-
             TaskFilterRow(
               selectedIndex: taskStore.filter.index,
               onSelect: (i) => taskStore.setFilter(TaskFilterMode.values[i]),
             ),
             const SizedBox(height: AppSpacing.cardGap),
-
             BubbleButton(
-              onPressed: () => AddTaskAction().run(context: context, service: service),
+              onPressed: () =>
+                  AddTaskAction().run(context: context, service: service),
               child: const Text('Add Task'),
             ),
             const SizedBox(height: 10),
@@ -146,7 +152,6 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
               child: Text(taskStore.bulkMode ? 'Exit Bulk Mode' : 'Bulk Mode'),
             ),
             const SizedBox(height: AppSpacing.cardGap),
-
             if (taskStore.bulkMode)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -155,10 +160,10 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
                   onSelectAllVisible: selectAllVisible,
                   onClear: taskStore.clearSelection,
                   onCancel: () => taskStore.setBulkMode(false),
-                  onDelete: () => confirmBulkDelete.run(context: context, service: service, store: taskStore),
+                  onDelete: () => confirmBulkDelete.run(
+                      context: context, service: service, store: taskStore),
                 ),
               ),
-
             if (visible.isEmpty)
               const PastelCard(child: Text('No tasks match this filter yet.'))
             else
@@ -168,7 +173,11 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
                 buildDefaultDragHandles: false,
                 onReorder: (oldIndex, newIndex) {
                   if (!canReorder) return;
-                  ReorderTasksAction().run(service: service, oldIndex: oldIndex, newIndex: newIndex, canReorder: canReorder);
+                  ReorderTasksAction().run(
+                      service: service,
+                      oldIndex: oldIndex,
+                      newIndex: newIndex,
+                      canReorder: canReorder);
                 },
                 itemCount: visible.length,
                 itemBuilder: (context, index) {
@@ -191,18 +200,22 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
                           : const Padding(
                               padding: EdgeInsets.all(10),
                               child: Opacity(
-  opacity: 0.25,
-  child: Icon(Icons.drag_handle_rounded),
-),
+                                opacity: 0.25,
+                                child: Icon(Icons.drag_handle_rounded),
+                              ),
                             ),
-                      onToggleStar: () => toggleStar.run(service: service, taskId: t.id),
-                      onToggleDone: () => toggleDone.run(service: service, taskId: t.id),
-                      onPickDueDate: () => pickDue.run(context: context, service: service, task: t),
+                      onToggleStar: () =>
+                          toggleStar.run(service: service, taskId: t.id),
+                      onToggleDone: () =>
+                          toggleDone.run(service: service, taskId: t.id),
+                      onPickDueDate: () => pickDue.run(
+                          context: context, service: service, task: t),
                       onEdit: () {
                         if (taskStore.bulkMode) {
                           taskStore.toggleSelected(t.id);
                         } else {
-                          EditTaskAction().run(context: context, service: service, task: t);
+                          EditTaskAction()
+                              .run(context: context, service: service, task: t);
                         }
                       },
                       onLongPress: () {
@@ -219,11 +232,3 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
     );
   }
 }
-
-
-
-
-
-
-
-
