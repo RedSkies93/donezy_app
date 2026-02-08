@@ -17,6 +17,5 @@ class ActionResult<T> {
   const ActionResult.failure([String? message])
       : this._(ok: false, cancelled: false, message: message);
 
-  const ActionResult.cancelled()
-      : this._(ok: false, cancelled: true);
+  const ActionResult.cancelled() : this._(ok: false, cancelled: true);
 }

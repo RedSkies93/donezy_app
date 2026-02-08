@@ -8,7 +8,7 @@ class ReorderTasksAction {
     required int newIndex,
     required bool canReorder,
   }) async {
-        if (!canReorder) {
+    if (!canReorder) {
       return const ActionResult.success();
     }
     if (oldIndex < 0 || newIndex < 0) {
@@ -18,4 +18,3 @@ class ReorderTasksAction {
     return const ActionResult.success();
   }
 }
-

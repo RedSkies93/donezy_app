@@ -135,7 +135,8 @@ class _DockBubble extends StatelessWidget {
 
     final outline = Colors.white.withValues(alpha: isDark ? 0.10 : 0.18);
     final iconColor = selected ? scheme.onPrimary : scheme.onSurface;
-    final textColor = selected ? scheme.onPrimary : scheme.onSurface.withValues(alpha: 0.80);
+    final textColor =
+        selected ? scheme.onPrimary : scheme.onSurface.withValues(alpha: 0.80);
 
     return PressBounce(
       onTap: onTap,

@@ -25,7 +25,8 @@ class BubbleButton extends StatelessWidget {
     final g = gradient ?? AppColors.gBubblePrimary;
 
     final border = Border.all(
-      color: Colors.white.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.10 : 0.22),
+      color: Colors.white.withValues(
+          alpha: Theme.of(context).brightness == Brightness.dark ? 0.10 : 0.22),
       width: 1,
     );
 

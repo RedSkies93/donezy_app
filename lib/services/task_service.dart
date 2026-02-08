@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -15,7 +15,6 @@ import 'session_store.dart';
 import 'task_store.dart';
 
 class TaskService {
-
   // Family scope (single source of truth)
   String get _familyId => _session?.familyId ?? 'demo_family';
 
@@ -31,7 +30,7 @@ class TaskService {
 
   final TaskStore _store;
   // ignore: unused_field
-final ChildStore _child;
+  final ChildStore _child;
 
   final AppConfig? _config;
   final SessionStore? _session;
@@ -39,7 +38,10 @@ final ChildStore _child;
 
   StreamSubscription<List<TaskModel>>? _sub;
 
-  bool get _firebaseOn => (_config?.enableFirebase ?? false) && _firestore != null && _session != null;
+  bool get _firebaseOn =>
+      (_config?.enableFirebase ?? false) &&
+      _firestore != null &&
+      _session != null;
 
   Future<void> _ensureSignedIn() async {
     if (!_firebaseOn) return;
@@ -57,7 +59,7 @@ final ChildStore _child;
 
   /// Called by dashboards (Phase 2) â€” keeps UI live with Firestore.
   // Compatibility shim: screens call TaskService.load()
-    // Phase 2: Firebase read-first (demo family), fallback to local/mock.
+  // Phase 2: Firebase read-first (demo family), fallback to local/mock.
   Future<void> load() async {
     try {
       final fs = _firestore;
@@ -71,6 +73,7 @@ final ChildStore _child;
     }
     await loadTasks();
   }
+
   Future<void> loadTasks() async {
     if (!_firebaseOn) return;
 
@@ -78,7 +81,7 @@ final ChildStore _child;
 
     await _sub?.cancel();
 
-      _sub = _firestore!.watchTasks(_familyId).listen((tasks) {
+    _sub = _firestore!.watchTasks(_familyId).listen((tasks) {
       _store.replaceAll(tasks);
     });
   }
@@ -93,7 +96,6 @@ final ChildStore _child;
   // ---------------------------------------------------------
 
   Future<void> addTask(String title, {String? childId}) async {
-
     final nextOrder = _store.tasks.length;
 
     final task = TaskModel(
@@ -120,17 +122,21 @@ final ChildStore _child;
     }
 
     // Offline fallback
-    _store.addLocal(task.copyWith(id: DateTime.now().microsecondsSinceEpoch.toString()));
+    _store.addLocal(
+        task.copyWith(id: DateTime.now().microsecondsSinceEpoch.toString()));
   }
 
   Future<void> toggleDone(String taskId) async {
-    final t = _store.tasks.where((x) => x.id == taskId).cast<TaskModel?>().firstWhere((x) => x != null, orElse: () => null);
+    final t = _store.tasks
+        .where((x) => x.id == taskId)
+        .cast<TaskModel?>()
+        .firstWhere((x) => x != null, orElse: () => null);
     if (t == null) return;
 
     final updated = t.copyWith(isDone: !t.isDone);
 
-      // Optimistic local update (Parent â†” Child immediate reflection)
-      _store.updateLocal(updated);
+    // Optimistic local update (Parent â†” Child immediate reflection)
+    _store.updateLocal(updated);
     _store.upsertLocal(updated);
 
     if (_firebaseOn) {
@@ -140,7 +146,10 @@ final ChildStore _child;
   }
 
   Future<void> toggleStar(String taskId) async {
-    final t = _store.tasks.where((x) => x.id == taskId).cast<TaskModel?>().firstWhere((x) => x != null, orElse: () => null);
+    final t = _store.tasks
+        .where((x) => x.id == taskId)
+        .cast<TaskModel?>()
+        .firstWhere((x) => x != null, orElse: () => null);
     if (t == null) return;
 
     final updated = t.copyWith(isStarred: !t.isStarred);
@@ -177,12 +186,15 @@ final ChildStore _child;
   }
 
   Future<void> renameTask(String taskId, String newTitle) async {
-    final t = _store.tasks.where((x) => x.id == taskId).cast<TaskModel?>().firstWhere((x) => x != null, orElse: () => null);
+    final t = _store.tasks
+        .where((x) => x.id == taskId)
+        .cast<TaskModel?>()
+        .firstWhere((x) => x != null, orElse: () => null);
     if (t == null) return;
 
     final updated = t.copyWith(title: newTitle);
 
-      _store.updateLocal(updated);
+    _store.updateLocal(updated);
     _store.upsertLocal(updated);
 
     if (_firebaseOn) {
@@ -192,12 +204,15 @@ final ChildStore _child;
   }
 
   Future<void> setPointsValue(String taskId, int points) async {
-    final t = _store.tasks.where((x) => x.id == taskId).cast<TaskModel?>().firstWhere((x) => x != null, orElse: () => null);
+    final t = _store.tasks
+        .where((x) => x.id == taskId)
+        .cast<TaskModel?>()
+        .firstWhere((x) => x != null, orElse: () => null);
     if (t == null) return;
 
     final updated = t.copyWith(pointsValue: points);
 
-      _store.updateLocal(updated);
+    _store.updateLocal(updated);
     _store.upsertLocal(updated);
 
     if (_firebaseOn) {
@@ -207,12 +222,15 @@ final ChildStore _child;
   }
 
   Future<void> setDueDate(String taskId, DateTime? dueDate) async {
-    final t = _store.tasks.where((x) => x.id == taskId).cast<TaskModel?>().firstWhere((x) => x != null, orElse: () => null);
+    final t = _store.tasks
+        .where((x) => x.id == taskId)
+        .cast<TaskModel?>()
+        .firstWhere((x) => x != null, orElse: () => null);
     if (t == null) return;
 
     final updated = t.copyWith(dueDate: dueDate);
 
-      _store.updateLocal(updated);
+    _store.updateLocal(updated);
     _store.upsertLocal(updated);
 
     if (_firebaseOn) {
@@ -220,6 +238,7 @@ final ChildStore _child;
       await _firestore!.updateTask(_familyId, updated);
     }
   }
+
   Future<void> reorder(int oldIndex, int newIndex) async {
     final ordered = _store.reorderLocal(oldIndex, newIndex);
 
@@ -229,4 +248,3 @@ final ChildStore _child;
     }
   }
 }
-

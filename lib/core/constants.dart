@@ -17,4 +17,3 @@ class AppSpacing {
   static const cardGap = 12.0;
   static const sectionGap = 18.0;
 }
-

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import '../models/task_model.dart';
 
 enum TaskFilterMode {
@@ -47,7 +47,8 @@ class TaskStore extends ChangeNotifier {
         return base
             .where((t) => t.dueDate != null)
             .where((t) => !t.isDone)
-            .where((t) => t.dueDate!.isAfter(start.subtract(const Duration(seconds: 1))))
+            .where((t) =>
+                t.dueDate!.isAfter(start.subtract(const Duration(seconds: 1))))
             .where((t) => t.dueDate!.isBefore(end.add(const Duration(days: 1))))
             .toList(growable: false);
 
@@ -99,14 +100,15 @@ class TaskStore extends ChangeNotifier {
 
   bool isSelected(String taskId) => _selectedIds.contains(taskId);
 
-    void selectAll(Iterable<String> ids) {
+  void selectAll(Iterable<String> ids) {
     var changed = false;
     for (final id in ids) {
       if (_selectedIds.add(id)) changed = true;
     }
     if (changed) notifyListeners();
   }
-void toggleSelected(String taskId) {
+
+  void toggleSelected(String taskId) {
     if (_selectedIds.contains(taskId)) {
       _selectedIds.remove(taskId);
     } else {
@@ -119,6 +121,7 @@ void toggleSelected(String taskId) {
     _selectedIds.clear();
     notifyListeners();
   }
+
   // ---------------------------------------------------------
   // Phase 2 compatibility helpers (used by TaskService)
   // ---------------------------------------------------------
@@ -137,6 +140,7 @@ void toggleSelected(String taskId) {
     }
     updateTask(task);
   }
+
   void updateLocal(TaskModel updated) {
     final index = _tasks.indexWhere((t) => t.id == updated.id);
     if (index == -1) return;
@@ -173,4 +177,3 @@ void toggleSelected(String taskId) {
     return updated;
   }
 }
-

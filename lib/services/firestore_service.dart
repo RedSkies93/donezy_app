@@ -48,7 +48,8 @@ class FirestoreService {
     await batch.commit();
   }
 
-  Future<void> batchUpdateOrder(String familyId, List<TaskModel> ordered) async {
+  Future<void> batchUpdateOrder(
+      String familyId, List<TaskModel> ordered) async {
     final batch = _db.batch();
     for (var i = 0; i < ordered.length; i++) {
       final t = ordered[i];
@@ -94,6 +95,7 @@ class FirestoreService {
       'updatedAt': FieldValue.serverTimestamp(),
     };
   }
+
   // Phase 2 (read-only): fetch tasks for a family.
   // Path: /families/{familyId}/tasks
   Future<List<TaskModel>> readTasks(String familyId) async {
@@ -107,23 +109,20 @@ class FirestoreService {
     for (final d in snap.docs) {
       final data = d.data();
       out.add(TaskModel(
-      id: d.id,
-      title: (data['title'] as String?) ?? '',
-      childId: (data['childId'] as String?),
-      isStarred: (data['isStarred'] as bool?) ?? false,
-      isEnabled: (data['isEnabled'] as bool?) ?? true,
-      isDone: (data['isDone'] as bool?) ?? false,
-      pointsValue: (data['points'] as int?) ?? (data['pointsValue'] as int?) ?? 0,
-      order: (data['order'] as int?) ?? 0,
-      dueDate: (data['dueDate'] is Timestamp) ? (data['dueDate'] as Timestamp).toDate() : null,
+        id: d.id,
+        title: (data['title'] as String?) ?? '',
+        childId: (data['childId'] as String?),
+        isStarred: (data['isStarred'] as bool?) ?? false,
+        isEnabled: (data['isEnabled'] as bool?) ?? true,
+        isDone: (data['isDone'] as bool?) ?? false,
+        pointsValue:
+            (data['points'] as int?) ?? (data['pointsValue'] as int?) ?? 0,
+        order: (data['order'] as int?) ?? 0,
+        dueDate: (data['dueDate'] is Timestamp)
+            ? (data['dueDate'] as Timestamp).toDate()
+            : null,
       ));
     }
     return out;
   }
 }
-
-
-
-
-
-

@@ -34,3 +34,8 @@ raw_rasks_links.txt
 # Local patch scripts
 scripts/
 
+
+
+# DONEZY: allow tracked PowerShell tooling
+!scripts/
+!scripts/*.ps1

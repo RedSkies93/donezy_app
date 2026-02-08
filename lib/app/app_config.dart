@@ -10,5 +10,3 @@ class AppConfig {
   /// Phase 2 (live Firestore on)
   static const liveFirebase = AppConfig(enableFirebase: true);
 }
-
-

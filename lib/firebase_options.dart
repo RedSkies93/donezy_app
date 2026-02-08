@@ -63,8 +63,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '1048144802705',
     projectId: 'donezyapp-815d6',
     storageBucket: 'donezyapp-815d6.firebasestorage.app',
-    iosClientId: '1048144802705-gngc19ui0slsrmjd0eqphe53a6r25goc.apps.googleusercontent.com',
+    iosClientId:
+        '1048144802705-gngc19ui0slsrmjd0eqphe53a6r25goc.apps.googleusercontent.com',
     iosBundleId: 'com.example.donzeyApp',
   );
-
 }

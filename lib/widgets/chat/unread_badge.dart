@@ -5,5 +5,6 @@ class UnreadBadge extends StatelessWidget {
   const UnreadBadge({super.key, required this.count});
 
   @override
-  Widget build(BuildContext context) => count <= 0 ? const SizedBox.shrink() : Badge(label: Text('$count'));
+  Widget build(BuildContext context) =>
+      count <= 0 ? const SizedBox.shrink() : Badge(label: Text('$count'));
 }

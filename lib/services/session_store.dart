@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/child_model.dart';
+
 class SessionStore extends ChangeNotifier {
   String userId = '';
   bool isParentMode = true;
@@ -18,21 +19,18 @@ class SessionStore extends ChangeNotifier {
 
   String? selectedChildId;
 
-    void setSelectedChildId(String? id) {
+  void setSelectedChildId(String? id) {
     selectedChildId = (id != null && id.isEmpty) ? null : id;
     notifyListeners();
   }
 
-    void setUserId(String id) {
+  void setUserId(String id) {
     userId = id;
     notifyListeners();
   }
 
-    void setFamilyId(String id) {
+  void setFamilyId(String id) {
     familyId = id.isEmpty ? 'demo_family' : id;
     notifyListeners();
   }
 }
-
-
-

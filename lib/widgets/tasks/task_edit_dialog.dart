@@ -130,7 +130,8 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
             borderRadius: BorderRadius.circular(999),
             border: Border.all(width: 1),
           ),
-          child: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+          child:
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
         ),
       ),
     );
@@ -181,7 +182,8 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
           // Points (cute stepper)
           Row(
             children: [
-              const Text('Points', style: TextStyle(fontWeight: FontWeight.w900)),
+              const Text('Points',
+                  style: TextStyle(fontWeight: FontWeight.w900)),
               const Spacer(),
               _stepperButton(
                 icon: Icons.remove_circle_outline_rounded,
@@ -190,12 +192,14 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
                 tooltip: '-1 (hold: -5)',
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(width: 1),
                 ),
-                child: Text('$_points', style: const TextStyle(fontWeight: FontWeight.w900)),
+                child: Text('$_points',
+                    style: const TextStyle(fontWeight: FontWeight.w900)),
               ),
               _stepperButton(
                 icon: Icons.add_circle_outline_rounded,
@@ -211,16 +215,19 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
           // Due date quick picks + pick/clear
           Row(
             children: [
-              const Text('Due date', style: TextStyle(fontWeight: FontWeight.w900)),
+              const Text('Due date',
+                  style: TextStyle(fontWeight: FontWeight.w900)),
               const Spacer(),
               if (due != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(width: 1),
                   ),
-                  child: Text('Due ${_mmdd(due)}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                  child: Text('Due ${_mmdd(due)}',
+                      style: const TextStyle(fontWeight: FontWeight.w900)),
                 ),
             ],
           ),
@@ -233,8 +240,14 @@ class _TaskEditDialogState extends State<TaskEditDialog> {
             alignment: WrapAlignment.center,
             children: [
               _chip(label: 'Today', onTap: () => _setDue(_todayStart())),
-              _chip(label: 'Tomorrow', onTap: () => _setDue(_todayStart().add(const Duration(days: 1)))),
-              _chip(label: 'Next Week', onTap: () => _setDue(_todayStart().add(const Duration(days: 7)))),
+              _chip(
+                  label: 'Tomorrow',
+                  onTap: () =>
+                      _setDue(_todayStart().add(const Duration(days: 1)))),
+              _chip(
+                  label: 'Next Week',
+                  onTap: () =>
+                      _setDue(_todayStart().add(const Duration(days: 7)))),
               _chip(label: 'Pick…', onTap: _pickDueDate),
               _chip(label: 'Clear', onTap: _clearDueDate),
             ],

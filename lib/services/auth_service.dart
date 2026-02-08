@@ -13,4 +13,3 @@ class AuthService {
     session.userId = '';
   }
 }
-

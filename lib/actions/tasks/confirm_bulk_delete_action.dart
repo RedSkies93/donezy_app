@@ -54,9 +54,3 @@ class ConfirmBulkDeleteAction {
     return const ActionResult.success();
   }
 }
-
-
-
-
-
-

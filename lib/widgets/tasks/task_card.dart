@@ -74,7 +74,8 @@ class TaskCard extends StatelessWidget {
         children: [
           Icon(icon, size: 16),
           const SizedBox(width: 6),
-          Text(label,
+          Text(
+            label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w900),
@@ -124,161 +125,180 @@ class TaskCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Column(
-  crossAxisAlignment: CrossAxisAlignment.stretch,
-  children: [
-    Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Far-left drag handle (dashboard passes ReorderableDragStartListener)
-        if (dragHandle != null)
-          Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.35),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            blurRadius: 6,
-            offset: Offset(0, 2),
-            color: Colors.black.withValues(alpha: 0.06),
-          ),
-        ],
-          ),
-    child: dragHandle!,
-  ),
-        if (dragHandle != null) const SizedBox(width: 12),
-
-        // Centered title (not cut off)
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: Text(
-                task.title,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      decoration: task.isDone ? TextDecoration.lineThrough : null,
-                    ),
-              ),
-            ),
-          ),
-        ),
-
-        // Far-right side: star at the top-right corner + done centered on the right edge
-        SizedBox(
-          width: 52,
-          height: 44,
-          child: Stack(
-            children: [
-              Align(
-  alignment: Alignment.topRight,
-  child: Container(
-    decoration: BoxDecoration(
-      color: task.isStarred
-          ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)
-          : Colors.transparent,
-      shape: BoxShape.circle,
-    ),
-    child: _tapIcon(
-      context: context,
-      icon: Icons.star_rounded,
-onTap: onToggleStar,
-      tooltip: 'Star',
-    ),
-  ),
-),
-              Align(
-                alignment: Alignment.centerRight,
-                child: _tapIcon(
-                  context: context,
-                  icon: task.isDone
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  onTap: onToggleDone,
-                  tooltip: 'Done',
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-
-const SizedBox(height: 8),
-
-// Pencil + calendar under the title (centered)
-Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-if (onEdit != null) _tapIcon(
-          context: context,
-          icon: Icons.edit_rounded,
-          onTap: onEdit,
-          tooltip: 'Edit',
-        ),
-          if (onEdit != null && onPickDueDate != null) const SizedBox(width: 12),
-if (onPickDueDate != null) _tapIcon(
-          context: context,
-          icon: Icons.calendar_month_rounded,
-          onTap: onPickDueDate,
-          tooltip: (onPickDueDate == null) ? 'No due date' : 'Set due date',
-        ),
-      ],
-    ),
-  ],
-),
-const SizedBox(height: 10),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _pill(
-                      context,
-                      label: pointsLabel,
-                      strong: false,
-                      icon: Icons.bolt_rounded,
-                    ),
-                    const SizedBox(width: 8),
-                    _pill(
-                      context,
-                      label: dueLabel,
-                      strong: (dueLabel != 'No due' && _isOverdue),
-                      icon: (dueLabel == 'No due')
-                          ? Icons.event_busy_rounded
-                          : (_isOverdue
-                              ? Icons.warning_rounded
-                              : Icons.schedule_rounded),
-                    ),
-                    if (isSelected)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Far-left drag handle (dashboard passes ReorderableDragStartListener)
+                      if (dragHandle != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest
+                                .withValues(alpha: 0.65),
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outlineVariant
+                                  .withValues(alpha: 0.35),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                blurRadius: 6,
+                                offset: Offset(0, 2),
+                                color: Colors.black.withValues(alpha: 0.06),
+                              ),
+                            ],
+                          ),
+                          child: dragHandle!,
                         ),
-                        decoration: BoxDecoration(
-                          color: cs.tertiary.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: cs.tertiary.withValues(alpha: 0.30),
-                            width: 1,
+                      if (dragHandle != null) const SizedBox(width: 12),
+
+                      // Centered title (not cut off)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: Text(
+                              task.title,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                    decoration: task.isDone
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                  ),
+                            ),
                           ),
                         ),
-                        child: const Text(
-                          'SELECTED',
-                          style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+
+                      // Far-right side: star at the top-right corner + done centered on the right edge
+                      SizedBox(
+                        width: 52,
+                        height: 44,
+                        child: Stack(
+                          children: [
+                            Align(
+                              alignment: Alignment.topRight,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: task.isStarred
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.12)
+                                      : Colors.transparent,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: _tapIcon(
+                                  context: context,
+                                  icon: Icons.star_rounded,
+                                  onTap: onToggleStar,
+                                  tooltip: 'Star',
+                                ),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: _tapIcon(
+                                context: context,
+                                icon: task.isDone
+                                    ? Icons.check_circle_rounded
+                                    : Icons.radio_button_unchecked_rounded,
+                                onTap: onToggleDone,
+                                tooltip: 'Done',
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                  ],
-                ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 8),
+
+// Pencil + calendar under the title (centered)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (onEdit != null)
+                        _tapIcon(
+                          context: context,
+                          icon: Icons.edit_rounded,
+                          onTap: onEdit,
+                          tooltip: 'Edit',
+                        ),
+                      if (onEdit != null && onPickDueDate != null)
+                        const SizedBox(width: 12),
+                      if (onPickDueDate != null)
+                        _tapIcon(
+                          context: context,
+                          icon: Icons.calendar_month_rounded,
+                          onTap: onPickDueDate,
+                          tooltip: (onPickDueDate == null)
+                              ? 'No due date'
+                              : 'Set due date',
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _pill(
+                    context,
+                    label: pointsLabel,
+                    strong: false,
+                    icon: Icons.bolt_rounded,
+                  ),
+                  const SizedBox(width: 8),
+                  _pill(
+                    context,
+                    label: dueLabel,
+                    strong: (dueLabel != 'No due' && _isOverdue),
+                    icon: (dueLabel == 'No due')
+                        ? Icons.event_busy_rounded
+                        : (_isOverdue
+                            ? Icons.warning_rounded
+                            : Icons.schedule_rounded),
+                  ),
+                  if (isSelected)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cs.tertiary.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: cs.tertiary.withValues(alpha: 0.30),
+                          width: 1,
+                        ),
+                      ),
+                      child: const Text(
+                        'SELECTED',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
         ),
@@ -286,25 +306,3 @@ const SizedBox(height: 10),
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

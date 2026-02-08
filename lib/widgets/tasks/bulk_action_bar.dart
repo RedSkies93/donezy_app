@@ -79,7 +79,8 @@ class BulkActionBar extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   selectedCount.toString(),
-                  style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                  style: textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w900),
                 ),
               ],
             ),

@@ -56,4 +56,3 @@ Future<T?> showRuledPaperDialog<T>({
     builder: (_) => RuledPaperDialog(title: title, child: child),
   );
 }
-

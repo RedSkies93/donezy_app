@@ -55,7 +55,10 @@ class LoginPage extends StatelessWidget {
                     children: [
                       Text(
                         'Welcome to Donezy',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -107,6 +110,3 @@ class LoginPage extends StatelessWidget {
     );
   }
 }
-
-
-

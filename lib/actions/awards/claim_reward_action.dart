@@ -21,7 +21,7 @@ class ClaimRewardAction {
         children: [
           Text('Claim:'),
           const SizedBox(height: 8),
-          Text('â€œ${reward.title}â€',
+          Text('"${reward.title}"',
               style: const TextStyle(fontWeight: FontWeight.w900)),
           const SizedBox(height: 8),
           Text('Cost: ${reward.costPoints} points'),
@@ -50,9 +50,10 @@ class ClaimRewardAction {
       return const ActionResult.cancelled();
     }
     final success = await service.claimReward(reward);
-    if (!success)
+    if (!success) {
       return const ActionResult.failure(
           'Not enough points or reward disabled.');
+    }
 
     return const ActionResult.success();
   }

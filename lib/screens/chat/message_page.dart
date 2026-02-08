@@ -89,10 +89,14 @@ class _MessagePageState extends State<MessagePage> {
                       children: [
                         Text(
                           'Family Chat 💬',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 8),
-                        const Text('Phase 3: Live chat store + send action (mock).'),
+                        const Text(
+                            'Phase 3: Live chat store + send action (mock).'),
                       ],
                     ),
                   ),
@@ -105,7 +109,9 @@ class _MessagePageState extends State<MessagePage> {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: Align(
-                          alignment: isParent ? Alignment.centerLeft : Alignment.centerRight,
+                          alignment: isParent
+                              ? Alignment.centerLeft
+                              : Alignment.centerRight,
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 280),
                             child: PastelCard(
@@ -119,7 +125,8 @@ class _MessagePageState extends State<MessagePage> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.page, 0, AppSpacing.page, AppSpacing.page),
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.page, 0, AppSpacing.page, AppSpacing.page),
               child: PastelCard(
                 child: Row(
                   children: [

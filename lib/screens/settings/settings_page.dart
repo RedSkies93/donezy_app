@@ -70,13 +70,17 @@ class SettingsPage extends StatelessWidget {
                 children: [
                   Text(
                     'Theme Mode',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 12),
                   CuteToggle<ThemeMode>(
                     value: store.mode,
                     options: const [
-                      CuteToggleOption(value: ThemeMode.system, label: 'System'),
+                      CuteToggleOption(
+                          value: ThemeMode.system, label: 'System'),
                       CuteToggleOption(value: ThemeMode.light, label: 'Light'),
                       CuteToggleOption(value: ThemeMode.dark, label: 'Dark'),
                     ],
@@ -107,4 +111,3 @@ class SettingsPage extends StatelessWidget {
     );
   }
 }
-
