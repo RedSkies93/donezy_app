@@ -72,8 +72,11 @@ class AwardsPage extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Rewards Store 🎁',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                    'Rewards Store ðŸŽ',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w900),
                   ),
                   PointsPill(points: points),
                 ],
@@ -85,26 +88,30 @@ class AwardsPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Recent Claims 🧾',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                    'Recent Claims ðŸ§¾',
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 10),
                   if (claims.isEmpty)
                     const Text('No claims yet. Claim a reward to see it here!')
                   else
                     ...claims.take(5).map(
-                      (c) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.check_circle_rounded, size: 18),
-                            const SizedBox(width: 10),
-                            Expanded(child: Text(c.rewardTitle)),
-                            Text('-'),
-                          ],
+                          (c) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle_rounded,
+                                    size: 18),
+                                const SizedBox(width: 10),
+                                Expanded(child: Text(c.rewardTitle)),
+                                Text('-'),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -112,7 +119,9 @@ class AwardsPage extends StatelessWidget {
             FutureBuilder<List<RewardModel>>(
               future: rewards.listRewards(),
               builder: (context, snap) {
-                if (!snap.hasData) return const PastelCard(child: Text('Loading rewards...'));
+                if (!snap.hasData) {
+                  return const PastelCard(child: Text('Loading rewards...'));
+                }
                 final items = snap.data!;
                 return Column(
                   children: [
@@ -122,13 +131,17 @@ class AwardsPage extends StatelessWidget {
                         child: PastelCard(
                           child: Row(
                             children: [
-                              Icon(r.isEnabled ? Icons.card_giftcard_rounded : Icons.block_rounded),
+                              Icon(r.isEnabled
+                                  ? Icons.card_giftcard_rounded
+                                  : Icons.block_rounded),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(r.title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                                    Text(r.title,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w900)),
                                     const SizedBox(height: 4),
                                     Text('${r.costPoints} pts'),
                                   ],
@@ -138,9 +151,13 @@ class AwardsPage extends StatelessWidget {
                               SizedBox(
                                 width: 110,
                                 child: BubbleButton(
-                                  onPressed: (!r.isEnabled || points < r.costPoints)
-                                      ? null
-                                      : () => claim.run(context: context, service: rewards, reward: r),
+                                  onPressed:
+                                      (!r.isEnabled || points < r.costPoints)
+                                          ? null
+                                          : () => claim.run(
+                                              context: context,
+                                              service: rewards,
+                                              reward: r),
                                   child: const Text('Claim'),
                                 ),
                               ),
@@ -158,4 +175,3 @@ class AwardsPage extends StatelessWidget {
     );
   }
 }
-
