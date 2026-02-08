@@ -70,6 +70,7 @@ class FirestoreService {
     return TaskModel(
       id: id,
       title: (m['title'] as String?) ?? '',
+      childId: (m['childId'] as String?),
       pointsValue: (m['pointsValue'] as int?) ?? 1,
       dueDate: due,
       isDone: (m['isDone'] as bool?) ?? false,
@@ -83,6 +84,7 @@ class FirestoreService {
     return <String, dynamic>{
       'id': idOverride ?? t.id,
       'title': t.title,
+      'childId': t.childId,
       'pointsValue': t.pointsValue,
       'dueDate': t.dueDate == null ? null : Timestamp.fromDate(t.dueDate!),
       'isDone': t.isDone,
@@ -107,6 +109,7 @@ class FirestoreService {
       out.add(TaskModel(
       id: d.id,
       title: (data['title'] as String?) ?? '',
+      childId: (data['childId'] as String?),
       isStarred: (data['isStarred'] as bool?) ?? false,
       isEnabled: (data['isEnabled'] as bool?) ?? true,
       isDone: (data['isDone'] as bool?) ?? false,
@@ -118,5 +121,9 @@ class FirestoreService {
     return out;
   }
 }
+
+
+
+
 
 

@@ -2,12 +2,19 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 
+
 import '../app/app_config.dart';
+
 import '../models/task_model.dart';
+
 import 'child_store.dart';
+
 import 'firestore_service.dart';
+
 import 'session_store.dart';
+
 import 'task_store.dart';
+
 
 class TaskService {
 
@@ -72,7 +79,8 @@ final ChildStore _child;
     await _ensureSignedIn();
 
     await _sub?.cancel();
-    _sub = _firestore!.watchTasks(_session!.familyId).listen((tasks) {
+
+      _sub = _firestore!.watchTasks(_familyId).listen((tasks) {
       _store.replaceAll(tasks);
     });
   }
@@ -86,12 +94,14 @@ final ChildStore _child;
   // Existing API used by Actions/UI
   // ---------------------------------------------------------
 
-  Future<void> addTask(String title) async {
+  Future<void> addTask(String title, {String? childId}) async {
+
     final nextOrder = _store.tasks.length;
 
     final task = TaskModel(
       id: '',
       title: title,
+      childId: childId,
       pointsValue: 1,
       dueDate: null,
       isDone: false,
@@ -102,9 +112,12 @@ final ChildStore _child;
 
     if (_firebaseOn) {
       await _ensureSignedIn();
-      await loadTasks();
-      await _firestore!.addTask(_session!.familyId, task);
-      await loadTasks();
+      // Do NOT reset listener on every add; start it only if missing.
+      if (_sub == null) {
+        await loadTasks();
+      }
+
+      await _firestore!.addTask(_familyId, task);
       return;
     }
 
@@ -117,11 +130,14 @@ final ChildStore _child;
     if (t == null) return;
 
     final updated = t.copyWith(isDone: !t.isDone);
+
+      // Optimistic local update (Parent ↔ Child immediate reflection)
+      _store.updateLocal(updated);
     _store.upsertLocal(updated);
 
     if (_firebaseOn) {
       await _ensureSignedIn();
-      await _firestore!.updateTask(_session!.familyId, updated);
+      await _firestore!.updateTask(_familyId, updated);
     }
   }
 
@@ -134,7 +150,7 @@ final ChildStore _child;
 
     if (_firebaseOn) {
       await _ensureSignedIn();
-      await _firestore!.updateTask(_session!.familyId, updated);
+      await _firestore!.updateTask(_familyId, updated);
     }
   }
 
@@ -143,20 +159,22 @@ final ChildStore _child;
 
     if (_firebaseOn) {
       await _ensureSignedIn();
-      await _firestore!.deleteTask(_session!.familyId, taskId);
+      await _firestore!.deleteTask(_familyId, taskId);
     }
   }
 
   Future<void> deleteMany(Set<String> ids) async {
     if (ids.isEmpty) return;
 
-    for (final id in ids) {
+    final idList = ids.toList(growable: false);
+
+    for (final id in idList) {
       _store.deleteLocal(id);
     }
 
     if (_firebaseOn) {
       await _ensureSignedIn();
-      await _firestore!.deleteMany(_session!.familyId, ids);
+      await _firestore!.deleteMany(_familyId, idList.toSet());
     }
   }
 
@@ -165,11 +183,13 @@ final ChildStore _child;
     if (t == null) return;
 
     final updated = t.copyWith(title: newTitle);
+
+      _store.updateLocal(updated);
     _store.upsertLocal(updated);
 
     if (_firebaseOn) {
       await _ensureSignedIn();
-      await _firestore!.updateTask(_session!.familyId, updated);
+      await _firestore!.updateTask(_familyId, updated);
     }
   }
 
@@ -178,11 +198,13 @@ final ChildStore _child;
     if (t == null) return;
 
     final updated = t.copyWith(pointsValue: points);
+
+      _store.updateLocal(updated);
     _store.upsertLocal(updated);
 
     if (_firebaseOn) {
       await _ensureSignedIn();
-      await _firestore!.updateTask(_session!.familyId, updated);
+      await _firestore!.updateTask(_familyId, updated);
     }
   }
 
@@ -191,11 +213,13 @@ final ChildStore _child;
     if (t == null) return;
 
     final updated = t.copyWith(dueDate: dueDate);
+
+      _store.updateLocal(updated);
     _store.upsertLocal(updated);
 
     if (_firebaseOn) {
       await _ensureSignedIn();
-      await _firestore!.updateTask(_session!.familyId, updated);
+      await _firestore!.updateTask(_familyId, updated);
     }
   }
 
@@ -204,9 +228,17 @@ final ChildStore _child;
 
     if (_firebaseOn) {
       await _ensureSignedIn();
-      await _firestore!.batchUpdateOrder(_session!.familyId, ordered);
+      await _firestore!.batchUpdateOrder(_familyId, ordered);
     }
   }
 }
+
+
+
+
+
+
+
+
 
 
