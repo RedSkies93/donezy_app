@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../actions/tasks/edit_task_action.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/pastel_card.dart';
@@ -157,13 +156,7 @@ class _ChildDashboardPageState extends State<ChildDashboardPage> {
                       onToggleDone: () =>
                           toggleDone.run(service: service, taskId: t.id),
                       onPickDueDate: null, // child: hidden
-                      onEdit: () async {
-                        await EditTaskAction().run(
-                          context: context,
-                          service: service,
-                          task: t,
-                        );
-                      },
+                      onEdit: null, // child: hidden,
 
                       onLongPress: null, // child: hidden
                     ),
