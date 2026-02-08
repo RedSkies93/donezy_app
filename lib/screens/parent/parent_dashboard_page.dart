@@ -173,6 +173,7 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
                 buildDefaultDragHandles: false,
                 onReorder: (oldIndex, newIndex) {
                   if (!canReorder) return;
+                  if (taskStore.bulkMode) return;
                   ReorderTasksAction().run(
                       service: service,
                       oldIndex: oldIndex,
@@ -204,17 +205,33 @@ class _ParentDashboardPageState extends State<ParentDashboardPage> {
                                 child: Icon(Icons.drag_handle_rounded),
                               ),
                             ),
-                      onToggleStar: () =>
-                          toggleStar.run(service: service, taskId: t.id),
-                      onToggleDone: () =>
-                          toggleDone.run(service: service, taskId: t.id),
-                      onPickDueDate: () => pickDue.run(
-                          context: context, service: service, task: t),
-                      onEdit: () {
+                      onToggleStar: () {
                         if (taskStore.bulkMode) {
                           taskStore.toggleSelected(t.id);
                         } else {
-                          EditTaskAction()
+                          toggleStar.run(service: service, taskId: t.id);
+                        }
+                      },
+                      onToggleDone: () {
+                        if (taskStore.bulkMode) {
+                          taskStore.toggleSelected(t.id);
+                        } else {
+                          toggleDone.run(service: service, taskId: t.id);
+                        }
+                      },
+                      onPickDueDate: () {
+                        if (taskStore.bulkMode) {
+                          taskStore.toggleSelected(t.id);
+                        } else {
+                          pickDue.run(
+                              context: context, service: service, task: t);
+                        }
+                      },
+                      onEdit: () async {
+                        if (taskStore.bulkMode) {
+                          taskStore.toggleSelected(t.id);
+                        } else {
+                          await EditTaskAction()
                               .run(context: context, service: service, task: t);
                         }
                       },
